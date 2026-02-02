@@ -1,0 +1,61 @@
+2026-02-02 16:41:05 | INFO     | utils.logger:setup_logger:35 - 日志系统初始化完成。
+2026-02-02 16:41:05 | INFO     | __main__:run_yolo_test:22 - ========== 开始 YOLO ONNX 推理全流程测试 ==========
+2026-02-02 16:41:05 | INFO     | __main__:run_yolo_test:28 - 步骤 1/4: 检查资源文件
+2026-02-02 16:41:05 | SUCCESS  | __main__:run_yolo_test:35 - 资源文件检查通过。
+2026-02-02 16:41:05 | INFO     | __main__:run_yolo_test:38 - 步骤 2/4: 加载测试图片
+2026-02-02 16:41:05 | SUCCESS  | __main__:run_yolo_test:43 - 图片加载成功，尺寸: 1280x778
+2026-02-02 16:41:05 | INFO     | __main__:run_yolo_test:46 - 步骤 3/4: 初始化 YOLO 识别器
+2026-02-02 16:41:05 | INFO     | core.detectors.yolo_detector:_initialize_model:73 - 开始加载 ONNX 模型，路径: d:\Projects\Reborn\assets\models\best.onnx
+2026-02-02 16:41:05 | DEBUG    | core.detectors.yolo_detector:_get_onnx_providers:36 - 系统上可用的 ONNX Providers: ['TensorrtExecutionProvider', 'CUDAExecutionProvider', 'CPUExecutionProvider']
+2026-02-02 16:41:05 | INFO     | core.detectors.yolo_detector:_get_onnx_providers:43 - GPU 已启用，开始检测可用硬件...
+2026-02-02 16:41:05 | SUCCESS  | core.detectors.yolo_detector:_get_onnx_providers:49 - 检测到 NVIDIA GPU (CUDA)，将优先使用。
+2026-02-02 16:41:05 | INFO     | core.detectors.yolo_detector:_get_onnx_providers:67 - 将按此顺序尝试使用 Providers: ['CUDAExecutionProvider', 'CPUExecutionProvider']
+2026-02-02 16:41:06 | SUCCESS  | core.detectors.yolo_detector:_initialize_model:82 - ONNX 模型加载成功，实际使用的 Provider: CPUExecutionProvider
+2026-02-02 16:41:06 | WARNING  | core.detectors.yolo_detector:_initialize_model:84 - GPU 初始化可能失败，ONNX 已自动回退到 CPU。
+2026-02-02 16:41:06 | DEBUG    | core.detectors.yolo_detector:_initialize_model:94 - 模型输入名: images, 输入形状: [640, 640]
+2026-02-02 16:41:06 | DEBUG    | core.detectors.yolo_detector:_initialize_model:95 - 模型输出名: ['output0']
+2026-02-02 16:41:06 | SUCCESS  | __main__:run_yolo_test:52 - 识别器初始化成功。
+2026-02-02 16:41:06 | INFO     | __main__:run_yolo_test:55 - 步骤 4/4: 执行目标检测
+2026-02-02 16:41:06 | INFO     | core.detectors.yolo_detector:detect:109 - 开始进行目标检测流程...
+2026-02-02 16:41:06 | DEBUG    | core.detectors.yolo_detector:detect:113 - 图片预处理完成。缩放比例: 0.5, 填充: (0.0, 125.5)
+2026-02-02 16:41:06 | DEBUG    | core.detectors.yolo_detector:detect:117 - 正在执行模型推理...
+2026-02-02 16:41:06 | SUCCESS  | core.detectors.yolo_detector:detect:119 - 模型推理完成。
+2026-02-02 16:41:06 | DEBUG    | core.detectors.yolo_detector:detect:120 - 模型原始输出 shape: (1, 11, 8400)
+2026-02-02 16:41:06 | DEBUG    | core.detectors.yolo_detector:_postprocess:153 - 开始后处理模型输出...
+2026-02-02 16:41:06 | DEBUG    | core.detectors.yolo_detector:_postprocess:190 - NMS 处理后剩余 31 个目标。
+2026-02-02 16:41:06 | INFO     | core.detectors.yolo_detector:detect:127 - 检测到 31 个目标。
+2026-02-02 16:41:06 | INFO     | __main__:run_yolo_test:60 - ========== 测试报告：检测成功 ==========
+2026-02-02 16:41:06 | INFO     | __main__:run_yolo_test:61 - 成功检测到 31 个目标:
+2026-02-02 16:41:06 | INFO     | __main__:run_yolo_test:63 -   目标 1: 类别ID=2, 置信度=1.00, 边界框 (x,y,w,h)=[640, 406, 165, 174]
+2026-02-02 16:41:06 | INFO     | __main__:run_yolo_test:63 -   目标 2: 类别ID=2, 置信度=0.99, 边界框 (x,y,w,h)=[474, 405, 163, 175]
+2026-02-02 16:41:06 | INFO     | __main__:run_yolo_test:63 -   目标 3: 类别ID=2, 置信度=0.99, 边界框 (x,y,w,h)=[723, 230, 82, 170]
+2026-02-02 16:41:06 | INFO     | __main__:run_yolo_test:63 -   目标 4: 类别ID=2, 置信度=0.98, 边界框 (x,y,w,h)=[974, 408, 84, 170]
+2026-02-02 16:41:06 | INFO     | __main__:run_yolo_test:63 -   目标 5: 类别ID=2, 置信度=0.98, 边界框 (x,y,w,h)=[893, 231, 80, 168]
+2026-02-02 16:41:06 | INFO     | __main__:run_yolo_test:63 -   目标 6: 类别ID=2, 置信度=0.98, 边界框 (x,y,w,h)=[219, 404, 169, 177]
+2026-02-02 16:41:06 | INFO     | __main__:run_yolo_test:63 -   目标 7: 类别ID=2, 置信度=0.98, 边界框 (x,y,w,h)=[475, 227, 163, 172]
+2026-02-02 16:41:06 | INFO     | __main__:run_yolo_test:63 -   目标 8: 类别ID=2, 置信度=0.98, 边界框 (x,y,w,h)=[892, 406, 79, 172]
+2026-02-02 16:41:06 | INFO     | __main__:run_yolo_test:63 -   目标 9: 类别ID=2, 置信度=0.97, 边界框 (x,y,w,h)=[808, 408, 80, 170]
+2026-02-02 16:41:06 | INFO     | __main__:run_yolo_test:63 -   目标 10: 类别ID=6, 置信度=0.97, 边界框 (x,y,w,h)=[385, 73, 46, 49]
+2026-02-02 16:41:06 | INFO     | __main__:run_yolo_test:63 -   目标 11: 类别ID=2, 置信度=0.97, 边界框 (x,y,w,h)=[391, 408, 79, 170]
+2026-02-02 16:41:06 | INFO     | __main__:run_yolo_test:63 -   目标 12: 类别ID=6, 置信度=0.97, 边界框 (x,y,w,h)=[785, 626, 50, 45]
+2026-02-02 16:41:06 | INFO     | __main__:run_yolo_test:63 -   目标 13: 类别ID=2, 置信度=0.96, 边界框 (x,y,w,h)=[808, 232, 80, 167]
+2026-02-02 16:41:06 | INFO     | __main__:run_yolo_test:63 -   目标 14: 类别ID=6, 置信度=0.96, 边界框 (x,y,w,h)=[385, 132, 47, 48]
+2026-02-02 16:41:06 | INFO     | __main__:run_yolo_test:63 -   目标 15: 类别ID=2, 置信度=0.96, 边界框 (x,y,w,h)=[975, 229, 82, 171]
+2026-02-02 16:41:06 | INFO     | __main__:run_yolo_test:63 -   目标 16: 类别ID=6, 置信度=0.95, 边界框 (x,y,w,h)=[379, 622, 55, 52]
+2026-02-02 16:41:06 | INFO     | __main__:run_yolo_test:63 -   目标 17: 类别ID=6, 置信度=0.94, 边界框 (x,y,w,h)=[726, 627, 42, 44]
+2026-02-02 16:41:06 | INFO     | __main__:run_yolo_test:63 -   目标 18: 类别ID=2, 置信度=0.92, 边界框 (x,y,w,h)=[641, 228, 80, 172]
+2026-02-02 16:41:06 | INFO     | __main__:run_yolo_test:63 -   目标 19: 类别ID=6, 置信度=0.91, 边界框 (x,y,w,h)=[726, 686, 44, 48]
+2026-02-02 16:41:06 | INFO     | __main__:run_yolo_test:63 -   目标 20: 类别ID=0, 置信度=0.91, 边界框 (x,y,w,h)=[76, 309, 139, 194]
+2026-02-02 16:41:06 | INFO     | __main__:run_yolo_test:63 -   目标 21: 类别ID=6, 置信度=0.89, 边界框 (x,y,w,h)=[448, 131, 45, 48]
+2026-02-02 16:41:06 | INFO     | __main__:run_yolo_test:63 -   目标 22: 类别ID=6, 置信度=0.89, 边界框 (x,y,w,h)=[722, 131, 49, 51]
+2026-02-02 16:41:06 | INFO     | __main__:run_yolo_test:63 -   目标 23: 类别ID=6, 置信度=0.88, 边界框 (x,y,w,h)=[847, 132, 50, 49]
+2026-02-02 16:41:06 | INFO     | __main__:run_yolo_test:63 -   目标 24: 类别ID=6, 置信度=0.86, 边界框 (x,y,w,h)=[383, 686, 50, 48]
+2026-02-02 16:41:06 | INFO     | __main__:run_yolo_test:63 -   目标 25: 类别ID=6, 置信度=0.84, 边界框 (x,y,w,h)=[848, 626, 52, 48]
+2026-02-02 16:41:06 | INFO     | __main__:run_yolo_test:63 -   目标 26: 类别ID=2, 置信度=0.84, 边界框 (x,y,w,h)=[223, 230, 247, 170]
+2026-02-02 16:41:06 | INFO     | __main__:run_yolo_test:63 -   目标 27: 类别ID=6, 置信度=0.83, 边界框 (x,y,w,h)=[448, 626, 46, 47]
+2026-02-02 16:41:06 | INFO     | __main__:run_yolo_test:63 -   目标 28: 类别ID=6, 置信度=0.82, 边界框 (x,y,w,h)=[448, 686, 47, 47]
+2026-02-02 16:41:06 | INFO     | __main__:run_yolo_test:63 -   目标 29: 类别ID=6, 置信度=0.81, 边界框 (x,y,w,h)=[512, 686, 43, 47]
+2026-02-02 16:41:06 | INFO     | __main__:run_yolo_test:63 -   目标 30: 类别ID=6, 置信度=0.81, 边界框 (x,y,w,h)=[785, 131, 49, 51]
+2026-02-02 16:41:06 | INFO     | __main__:run_yolo_test:63 -   目标 31: 类别ID=6, 置信度=0.67, 边界框 (x,y,w,h)=[511, 627, 45, 45]
+2026-02-02 16:41:06 | INFO     | __main__:run_yolo_test:76 - 检测结果已绘制并保存到 d:\Projects\Reborn\tests\assets\yolo_test_result.png
+2026-02-02 16:41:06 | INFO     | __main__:run_yolo_test:82 - ========== YOLO ONNX 推理全流程测试结束 ==========

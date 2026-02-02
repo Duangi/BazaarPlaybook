@@ -1,0 +1,6 @@
+pyside6
+loguru
+onnxruntime-gpu
+opencv-python-headless
+dxcam
+pywin32
