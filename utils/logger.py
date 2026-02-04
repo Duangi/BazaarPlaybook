@@ -1,38 +1,60 @@
+# utils/logger.py
 import sys
+import os
 from loguru import logger
+from PySide6.QtCore import QCoreApplication # 用于检查是否是 GUI 应用
 
-def setup_logger():
+# 确保 logs 文件夹存在
+if not os.path.exists("logs"):
+    os.makedirs("logs", exist_ok=True)
+
+# 基础配置
+LOG_FORMAT = "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level:<8}</level> | <cyan>{module}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>"
+FILE_ROTATION = "10 MB"
+RETENTION = "7 days"
+
+def setup_logger(is_gui_app: bool = True):
     """
-    配置全局 Loguru 日志记录器。
-
-    将日志同时输出到控制台和文件中。
-    - 控制台: INFO 级别以上，格式简洁。
-    - 文件: DEBUG 级别以上，记录在 logs/app.log，格式详细，带模块和行号。
+    配置日志输出。
+    - GUI 应用 (运行时): 只输出 INFO 及以上到控制台，DEBUG 到文件。
+    - 非 GUI (如测试脚本): 输出 DEBUG 及以上到控制台和文件。
     """
-    logger.remove()  # 移除默认的 handler，以便自定义
+    logger.remove() # 清除默认配置
 
-    # 控制台输出配置
-    logger.add(
-        sys.stderr,
-        level="INFO",
-        format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan> - <level>{message}</level>",
-        colorize=True
-    )
+    # --- Console Handler ---
+    console_level = "INFO"
+    if not is_gui_app:
+        console_level = "DEBUG" # 开发测试时，控制台输出更详细
 
-    # 文件输出配置
+    logger.add(sys.stderr, format=LOG_FORMAT, level=console_level, colorize=True, backtrace=True, diagnose=True)
+
+    # --- File Handler ---
+    # 总是输出 DEBUG 及以上到文件，方便调试
     logger.add(
-        "logs/app.log",
-        level="DEBUG",
-        format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}",
-        rotation="10 MB",  # 每 10 MB 切割一个新文件
-        retention="7 days", # 最多保留 7 天的日志
-        encoding="utf-8",
-        enqueue=True,      # 异步写入，防止阻塞
-        backtrace=True,    # 记录完整的异常堆栈
+        "logs/app_{time:YYYY-MM-DD}.log", 
+        rotation=FILE_ROTATION, 
+        retention=RETENTION, 
+        level="DEBUG", 
+        format=LOG_FORMAT,
+        colorize=False, # 文件日志不需要颜色
+        backtrace=True, 
         diagnose=True
     )
 
-    logger.info("日志系统初始化完成。")
+    logger.info("日志系统配置完成。")
+    # 记录运行环境信息
+    logger.debug(f"Python Interpreter: {sys.executable}")
+    logger.debug(f"Python Version: {sys.version}")
+    
+    try:
+        # 检查是否是 GUI 应用（由 main.py 启动）
+        QCoreApplication.instance()
+        logger.debug("检测到 GUI 环境 (QApplication.instance() 存在)")
+    except RuntimeError:
+        logger.debug("非 GUI 环境 (可能是 CLI 脚本)")
 
-# 立即执行，以便其他模块导入时日志系统已经配置好
-setup_logger()
+    return logger
+
+# 在你的 main.py 中调用：
+# from utils.logger import setup_logger
+# logger = setup_logger(is_gui_app=True) # 传入 True

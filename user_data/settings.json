@@ -1,0 +1,6 @@
+{
+    "yolo_fps": 4,
+    "best_ocr": "Windows_Native",
+    "preferred_provider": "CPUExecutionProvider",
+    "best_ocr_engine": "Windows_Native"
+}

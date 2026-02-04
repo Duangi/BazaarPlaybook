@@ -1,88 +1,85 @@
 import cv2
-import json
-from rapidocr_onnxruntime import RapidOCR
-from rapidfuzz import process, fuzz
 from loguru import logger
 import config
+from utils.search_engine import FuzzySearcher
+from platforms.adapter import PlatformAdapter
 
 class OCRService:
-    def __init__(self, items_db_path):
-        self.engine = RapidOCR()
-        with open(items_db_path, 'r', encoding='utf-8') as f:
-            self.items_db = json.load(f)
+    def __init__(self, db_path):
+        """
+        初始化 OCR 服务
+        :param db_path: items_db.json 的路径
+        """
+        try:
+            # 初始化 OCR 引擎
+            self.engine = PlatformAdapter.get_ocr_engine()
             
-        self.name_to_id = {item['name_cn']: item['id'] for item in self.items_db}
-        self.all_names = list(self.name_to_id.keys())
+            # 初始化独立的模糊匹配引擎
+            self.searcher = FuzzySearcher(db_path)
+            
+            logger.success("OCRService 初始化成功 (使用 RapidOCR + FuzzySearcher)")
+        except Exception as e:
+            logger.error(f"OCRService 初始化失败: {e}")
 
-    def _preprocess(self, img):
-        """ 全局自适应预处理 """
+    def _preprocess_for_ocr(self, img):
+        """
+        针对游戏详情框进行图像预处理
+        自适应二值化：无论背景是深棕色还是黑色，文字是金色还是白色，都能转为黑底白字。
+        """
+        # 1. 转为灰度图
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        # 针对不同颜色的背景，自适应二值化是万能的
+        
+        # 2. 图像放大：OCR 对大尺寸文字更准 (尤其是分辨率低时)
+        # 建议放大 1.5 - 2 倍
+        gray = cv2.resize(gray, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
+        
+        # 3. 自适应二值化 (Adaptive Thresholding)
+        # ADAPTIVE_THRESH_GAUSSIAN_C 效果通常比平均值法更好
+        # blockSize 必须为奇数，值越大对光影分布的鲁棒性越好
         binary = cv2.adaptiveThreshold(
-            gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
-            cv2.THRESH_BINARY_INV, 11, 2
+            gray, 255, 
+            cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+            cv2.THRESH_BINARY, 
+            11, 2
         )
+        
+        # 4. 可选：反色。OCR 引擎通常喜欢白底黑字或黑底白字。
+        # RapidOCR 对黑白对比度敏感，我们确保文字是亮的
         return binary
 
-    def recognize_name(self, detail_crop):
-        """ 
-        全框扫描逻辑：
-        1. 对整个 YOLO 截取的 detail 框进行 OCR
-        2. 寻找位置最靠上的文字块
-        3. 处理前缀并匹配数据库
-        """
-        # 预处理整个详情框
-        processed = self._preprocess(detail_crop)
-        
-        # OCR 识别全框内容
-        # RapidOCR 会返回每个文字块的 [坐标, 文本, 置信度]
-        results, _ = self.engine(processed)
-        
-        if not results:
+    def recognize_card_id(self, detail_crop):
+        if detail_crop is None or detail_crop.size == 0:
             return None
 
-        # 1. 过滤：只保留位于框的上半部分（前 40% 高度）的文字块
-        # 因为详情框底部可能有很长的描述，我们要的名字肯定在上面
-        h_limit = detail_crop.shape[0] * 0.4
-        top_candidates = []
-        
-        for res in results:
-            box, text, conf = res
-            top_left_y = box[0][1] # 文字块左上角的 Y 坐标
-            if top_left_y < h_limit:
-                top_candidates.append((top_left_y, text))
-        
-        if not top_candidates:
-            return None
+        try:
+            # 1. 这里的 raw_text 已经是一个字符串了，例如 "港口\n费：3"
+            raw_text = self.engine.recognize(detail_crop)
 
-        # 2. 排序：取 Y 坐标最小（最靠上）的一行
-        top_candidates.sort(key=lambda x: x[0])
-        raw_text = top_candidates[0][1].strip()
-        
-        logger.info(f"✨ 详情框顶部文字抓取成功: {raw_text}")
+            if not raw_text:
+                return None
 
-        # 3. 匹配与去前缀逻辑
-        # 针对 "沉重 农贸集市"、"一发入魂" 这种不同情况
-        best_match = self._fuzzy_match_name(raw_text)
-        
-        return best_match
-
-    def _fuzzy_match_name(self, raw_text):
-        """ 针对附魔前缀的增强匹配逻辑 """
-        # A. 尝试直接匹配（应对没有前缀的情况，如 "一发入魂"）
-        res = process.extractOne(raw_text, self.all_names, scorer=fuzz.WRatio)
-        
-        # B. 尝试分词匹配（应对有前缀的情况，如 "沉重 农贸集市"）
-        # 游戏里通常前缀和名字之间有空格，或者名字在最后
-        parts = raw_text.split(" ")
-        if len(parts) > 1:
-            # 优先尝试最后一个词（真正的卡牌名）
-            sub_res = process.extractOne(parts[-1], self.all_names, scorer=fuzz.WRatio)
-            if sub_res[1] > res[1]:
-                res = sub_res
-                
-        if res and res[1] >= config.FUZZY_MATCH_THRESHOLD:
-            logger.success(f"🤝 匹配到 ID: {self.name_to_id[res[0]]} (名字: {res[0]})")
-            return self.name_to_id[res[0]]
+            # 2. 直接按行切分
+            lines = [line.strip() for line in raw_text.split("\n") if line.strip()]
             
-        return None
+            if not lines:
+                return None
+
+            # 3. 拿到第一行（也就是详情框最顶部的文字）
+            first_line = lines[0]
+
+            clean_name = first_line.replace(" ", "")  # 去掉空格，防止 OCR 识别出多余空格影响匹配
+            logger.info(f"🔍 OCR 确权目标文字: '{clean_name}' (原始: '{first_line}')")
+            # 4. 执行模糊匹配
+            return self.searcher.find_best_match(clean_name, threshold=config.FUZZY_MATCH_THRESHOLD)
+
+        except Exception as e:
+            logger.error(f"OCRService 业务逻辑报错: {e}")
+            import traceback
+            logger.error(traceback.format_exc()) # 打印详细堆栈方便定位
+            return None
+
+    def debug_save_ocr_step(self, detail_crop, filename="logs/ocr_debug.png"):
+        """ 调试用：保存预处理后的图片，看看 OCR 引擎到底看到了什么 """
+        processed = self._preprocess_for_ocr(detail_crop)
+        cv2.imwrite(filename, processed)
+        logger.debug(f"已保存 OCR 预处理调试图至: {filename}")
