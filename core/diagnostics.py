@@ -1,8 +1,9 @@
+# core/diagnostics.py
 import time
-import numpy as np
-import onnxruntime as ort
-import cv2
 import os
+import cv2
+import onnxruntime as ort
+import numpy as np
 from loguru import logger
 
 import config
@@ -12,117 +13,115 @@ from platforms.adapter import PlatformAdapter
 
 class SystemDiagnostics:
     def __init__(self):
-        logger.info("Diag: 正在初始化诊断引擎...")
+        logger.debug("Diag: 正在初始化诊断引擎...")
         self.adapter = PlatformAdapter()
 
+    def check_environment(self):
+        """[基础检查] 检查核心模型与数据库文件是否存在"""
+        model_ok = os.path.exists(config.MODEL_PATH)
+        db_ok = os.path.exists(config.ITEMS_DB_PATH)
+        return {
+            "status": model_ok and db_ok,
+            "details": f"模型文件:{'OK' if model_ok else '缺失'}, 数据库:{'OK' if db_ok else '缺失'}"
+        }
+
     def benchmark_yolo(self, image_path):
-        """任务1：测试所有可用 Provider 的推理速度"""
-        logger.info(f"Diag: 开始运行 YOLO 性能测试 (图片: {image_path})")
-        
-        if not os.path.exists(image_path):
-            logger.error(f"Diag: 测试图片不存在: {image_path}")
-            return None
-
+        """[任务 1] YOLO 性能测试：评估各后端并计算建议刷新率"""
+        logger.info(f"Diag: 开始 YOLO 性能压测，图片路径: {image_path}")
         img = cv2.imread(image_path)
-        if img is None:
-            logger.error("Diag: 图片解码失败")
+        if img is None: 
+            logger.error("Diag: YOLO 测试图片读取失败")
             return None
-
+        
         providers = ort.get_available_providers()
         results = []
 
         for p in providers:
-            logger.info(f"Diag: 正在评估后端 -> {p}")
+            logger.info(f"Diag: 正在测试 Provider: {p}")
             try:
-                # 实例化真正的类，触发其内部的初始化日志
+                # 实例化 YoloDetector 触发内部详尽日志
                 detector = YoloDetector(config.MODEL_PATH, providers=[p])
                 
                 # 预热一次
                 detector.detect_stream(img)
                 
-                # 计时测试
+                # 正式侧速
                 times = []
-                for i in range(15):
+                for _ in range(15):
                     start = time.perf_counter()
-                    detector.detect_stream(img) # 触发 yolo_detector.py 内部的剖析日志
+                    detector.detect_stream(img) # 触发每一帧的耗时拆解日志
                     times.append((time.perf_counter() - start) * 1000)
                 
                 avg_ms = np.mean(times)
                 results.append({"provider": p, "avg_ms": avg_ms})
-                logger.success(f"Diag: {p} 测试完成，平均耗时: {avg_ms:.2f}ms")
+                logger.success(f"Diag: {p} 平均耗时: {avg_ms:.2f}ms")
             except Exception as e:
-                logger.warning(f"Diag: Provider {p} 启动或运行失败: {e}")
+                logger.warning(f"Diag: Provider {p} 无法运行: {e}")
                 continue
 
-        if not results:
+        if not results: 
             return None
-
+        
         best = min(results, key=lambda x: x['avg_ms'])
+        # 建议 FPS = 1000 / (耗时 * 1.5倍安全冗余)
         suggested_fps = int(1000 / (best['avg_ms'] * 1.5))
         return {
             "best_provider": best['provider'], 
             "avg_ms": best['avg_ms'], 
-            "suggested_fps": min(suggested_fps, 30), 
+            "suggested_fps": min(suggested_fps, 30),
             "all": results
         }
 
     def benchmark_matcher(self, image_samples: dict):
-        """任务2：测试 ORB 在不同尺寸下的耗时"""
-        logger.info("Diag: 开始运行 ORB 匹配深度测试...")
-        # 实例化真正的类，触发其库加载日志
+        """[任务 2] ORB 匹配可用性测试：分尺寸反馈耗时与结果"""
+        logger.info("Diag: 开始 ORB 匹配可用性测试...")
+        # 实例化 FeatureMatcher 触发特征库加载日志
         matcher = FeatureMatcher()
         report = {}
         
         for size, img in image_samples.items():
             if img is None:
-                logger.warning(f"Diag: 跳过 {size} 样本测试，图像数据为空")
+                logger.warning(f"Diag: {size} 尺寸测试图为空，已跳过")
                 continue
             
-            logger.info(f"Diag: 正在比对 {size} 分类样本...")
+            logger.info(f"Diag: 正在比对 [{size}] 分类样本...")
             start = time.perf_counter()
-            res = matcher.match(img, size) # 触发 feature_matcher.py 内部的匹配日志
+            # 这里的 match 方法会触发详尽的暴力比对过程日志
+            res = matcher.match(img, size) 
             dur = (time.perf_counter() - start) * 1000
             
-            score = res[0][1] if res else 0.0
-            matched_id = res[0][0] if res else None
-            
-            report[size] = {"time_ms": dur, "matched": matched_id, "score": score}
-            
+            if res:
+                match_id, score = res[0]
+                logger.success(f"Diag: [{size}] 匹配成功! 得分: {score:.4f}")
+                report[size] = {"time_ms": dur, "matched": match_id, "score": score}
+            else:
+                logger.error(f"Diag: [{size}] 匹配失败 (低于阈值)")
+                report[size] = {"time_ms": dur, "matched": None, "score": 0.0}
         return report
 
     def benchmark_ocr(self, detail_img):
-        """任务3：测试所有 OCR 引擎速度并选择最快"""
-        logger.info("Diag: 开始运行 OCR 引擎全量对比测试...")
-        
-        if detail_img is None:
-            logger.error("Diag: 传入的 OCR 测试图片为 None，请检查路径！")
-            return None
-
+        """[任务 3] OCR 性能测试：横评所有引擎并自动选优"""
+        logger.info("Diag: 开始 OCR 引擎全量性能横评...")
         engines = self.adapter.get_all_ocr_engines()
         results = []
 
         for eng in engines:
-            logger.info(f"Diag: 正在测试 OCR 引擎: {eng.name}")
+            logger.info(f"Diag: 正在测试引擎: {eng.name}")
             try:
                 times = []
-                # 跑3次取平均
                 for i in range(3):
                     start = time.perf_counter()
-                    text = eng.recognize(detail_img) # 触发平台 OCR 的内部日志
-                    # 在日志里打印识别出的前几个字，这样 text 就被“使用”了
-                    preview = text.replace('\n', ' ')[:15]
-
+                    _text = eng.recognize(detail_img) # 触发平台原生的细节日志
                     times.append((time.perf_counter() - start) * 1000)
-                    logger.debug(f"Diag: {eng.name} 第 {i+1} 次尝试耗时: {times[-1]:.2f}ms | 预览: [{preview}...]")
                 
                 avg_ms = np.mean(times)
                 results.append({"name": eng.name, "avg_ms": avg_ms})
-                logger.success(f"Diag: {eng.name} 测试完成，平均耗时: {avg_ms:.2f}ms")
+                logger.success(f"Diag: {eng.name} 平均耗时: {avg_ms:.2f}ms")
             except Exception as e:
-                logger.error(f"Diag: 引擎 {eng.name} 运行崩溃: {e}")
+                logger.error(f"Diag: OCR 引擎 {eng.name} 运行异常: {e}")
 
-        if not results:
+        if not results: 
             return None
-            
+        
         best = min(results, key=lambda x: x['avg_ms'])
         return {"best_engine_name": best['name'], "all": results}
