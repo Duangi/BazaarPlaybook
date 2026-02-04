@@ -1,6 +1,6 @@
 {
     "yolo_fps": 4,
-    "best_ocr": "Windows_Native",
+    "best_ocr": "RapidOCR_ONNX",
     "preferred_provider": "CPUExecutionProvider",
     "best_ocr_engine": "Windows_Native"
 }
