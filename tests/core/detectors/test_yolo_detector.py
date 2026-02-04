@@ -12,7 +12,7 @@ def run_yolo_test():
 
     # 定义资源路径 (使用 os.path.join 保证跨平台兼容性)
     model_path = "assets/models/best.onnx"
-    test_image_path = "tests/assets/yolo_test.png"
+    test_image_path = "tests/assets/Jules1.png"
     # 1. 检查文件是否存在
     logger.info("步骤 1/4: 检查资源文件")
     if not os.path.exists(model_path):

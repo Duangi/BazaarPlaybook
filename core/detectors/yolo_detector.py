@@ -131,6 +131,25 @@ class YoloDetector:
         
         return detections
 
+    def detect_stream(self, image: np.ndarray):
+        """
+        对单张图片进行目标检测，无日志记录，专为高性能流式处理设计。
+        """
+        # 1. 预处理
+        input_tensor, ratio, (dw, dh) = self._preprocess(image)
+
+        # 2. 推理
+        try:
+            outputs = self.session.run(self.output_names, {self.input_name: input_tensor})
+        except Exception:
+            # 在流式处理中，如果一帧失败，我们通常返回空结果并继续
+            return []
+
+        # 3. 后处理
+        detections = self._postprocess_stream(outputs[0], ratio, (dw, dh))
+        
+        return detections
+
     def _preprocess(self, image: np.ndarray):
         """将原始图片预处理为模型输入格式。"""
         img_h, img_w = image.shape[:2]
@@ -191,4 +210,43 @@ class YoloDetector:
                     'box': boxes[i] # [x, y, w, h]
                 })
         logger.debug(f"NMS 处理后剩余 {len(detections)} 个目标。")
+        return detections
+
+    # 在流式处理模式下，输出格式与 detect 方法相同，但不记录日志
+    def _postprocess_stream(self, output, ratio, pad):
+        # YOLOv8 的输出格式是 [batch, 4 + num_classes, num_boxes]
+        # 我们需要将其转置为 [batch, num_boxes, 4 + num_classes]
+        output = output[0].T
+        
+        boxes = []
+        scores = []
+        class_ids = []
+
+        for row in output:
+            # 前4个是坐标 (cx, cy, w, h)，后面是类别分数
+            confidence = row[4:].max()
+            if confidence >= self.confidence_thresh:
+                class_id = row[4:].argmax()
+                scores.append(confidence)
+                class_ids.append(class_id)
+                
+                # 转换坐标
+                cx, cy, w, h = row[:4]
+                x1 = int((cx - w / 2 - pad[0]) / ratio)
+                y1 = int((cy - h / 2 - pad[1]) / ratio)
+                x2 = int((cx + w / 2 - pad[0]) / ratio)
+                y2 = int((cy + h / 2 - pad[1]) / ratio)
+                boxes.append([x1, y1, x2 - x1, y2 - y1]) # xywh 格式
+
+        # 应用非极大值抑制 (NMS)
+        indices = cv2.dnn.NMSBoxes(boxes, scores, self.confidence_thresh, self.nms_thresh)
+        
+        detections = []
+        if len(indices) > 0:
+            for i in indices.flatten():
+                detections.append({
+                    'class_id': class_ids[i],
+                    'confidence': scores[i],
+                    'box': boxes[i] # [x, y, w, h]
+                })
         return detections
