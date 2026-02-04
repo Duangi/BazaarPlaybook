@@ -1,6 +1,5 @@
 import cv2
 import json
-import numpy as np
 from rapidocr_onnxruntime import RapidOCR
 from rapidfuzz import process, fuzz
 from loguru import logger

@@ -1,4 +1,6 @@
-import time, json, cv2
+import time
+import json
+import cv2
 from loguru import logger
 import config
 from core.detectors.yolo_detector import YoloDetector
@@ -30,7 +32,8 @@ def main():
         id_map = {i['id']: i['name_cn'] for i in json.load(f)}
 
     img = cv2.imread("tests/assets/Jules1.png")
-    if img is None: return
+    if img is None: 
+        return
 
     results = yolo.detect_stream(img)
     item_dets = [d for d in results if d['class_id'] == config.CLS_MAP['ITEM']]

@@ -2,7 +2,6 @@ import os
 import cv2
 import pickle
 import json
-import numpy as np
 from loguru import logger
 import config
 
@@ -28,15 +27,16 @@ class FeatureMatcher:
                 if 'Small' not in self.static_lib:
                     self._build_static_library()
                 return
-            except: 
-                pass
+            except Exception as e:
+                logger.error(f"加载静态特征库失败: {e}")
         self._build_static_library()
 
         if os.path.exists(config.USER_MEMORY_FILE):
             try: 
                 with open(config.USER_MEMORY_FILE, "rb") as f: 
                     self.user_memory = pickle.load(f)
-            except: 
+            except Exception as e:
+                logger.error(f"加载用户记忆库失败: {e}")
                 self.user_memory = {}
 
     def _build_static_library(self):
@@ -51,10 +51,12 @@ class FeatureMatcher:
             size_cat = item.get('size', '').split('/')[0].strip()
             
             path = self._find_img_path(item_id)
-            if not path or size_cat not in self.static_lib: continue
+            if not path or size_cat not in self.static_lib: 
+                continue
             
             img_gray = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
-            if img_gray is None: continue
+            if img_gray is None: 
+                continue
 
             kp, des = self.orb.detectAndCompute(img_gray, None)
             if des is not None:
@@ -70,7 +72,8 @@ class FeatureMatcher:
     def _find_img_path(self, item_id):
         for ext in ['.png', '.jpg', '.webp']:
             p = os.path.join(config.CARD_IMAGES_DIR, f"{item_id}{ext}")
-            if os.path.exists(p): return p
+            if os.path.exists(p): 
+                return p
         return None
 
     def match(self, target_img, size_cat):
@@ -106,7 +109,8 @@ class FeatureMatcher:
                 
                 denom = max(1, min(len(t_kp), src['kp_count']))
                 score = float(good) / denom
-                if score > best_score: best_score = score
+                if score > best_score: 
+                    best_score = score
             
             if best_score >= config.ORB_MATCH_THRESHOLD:
                 final_res.append((cid, best_score))
