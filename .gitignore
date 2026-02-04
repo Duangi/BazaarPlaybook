@@ -1,0 +1,99 @@
+
+# ============================================================
+# Python 核心缓存与字节码
+# ============================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# ============================================================
+# 虚拟环境 (Virtual Environments)
+# ============================================================
+venv/
+.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# ============================================================
+# IDE 与 编辑器 (VS Code / PyCharm)
+# ============================================================
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+.history/
+
+# ============================================================
+# 项目特定：日志文件 (Loguru 输出)
+# ============================================================
+logs/*.log
+logs/*.txt
+# 保留 logs 文件夹本身，但不跟踪里面的日志文件
+!logs/.gitkeep
+
+# ============================================================
+# 项目特定：特征库缓存与用户记忆 (重点)
+# ============================================================
+# 自动生成的特征库通常很大且可以重新构建，不建议进入 Git
+assets/features_cache/*.pkl
+assets/features_cache/*.bin
+
+# 用户记忆库包含用户特定的识别数据，必须忽略
+assets/features_cache/user_memory_library.pkl
+assets/features_cache/final_highspeed_library.pkl
+assets/features_cache/robust_static_library.pkl
+
+# 如果你想保留文件夹结构，可以在对应目录下创建一个 .gitkeep
+!assets/features_cache/.gitkeep
+
+# ============================================================
+# 项目特定：大数据与模型文件
+# ============================================================
+# YOLO 模型文件 (.onnx) 建议根据大小决定是否忽略
+# 如果模型 > 50MB，建议忽略并单独分发
+# assets/models/*.onnx
+
+# 排除用户本地的配置文件
+data/user_config.json
+state_cache.json
+
+# ============================================================
+# 操作系统特定
+# ============================================================
+.DS_Store
+.DS_Store?
+._*
+Thumbe.db
+desktop.ini
+
+# ============================================================
+# 打包产物 (PyInstaller / Nuitka)
+# ============================================================
+*.spec
+dist/
+build/
