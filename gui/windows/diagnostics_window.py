@@ -66,6 +66,11 @@ class DiagWorker(QThread):
             logger.remove(sink_id)
 
 class DiagnosticsWindow(QWidget):
+    """诊断窗口"""
+    
+    enter_main_requested = Signal()  # 新增：请求进入主界面的信号
+    closed = Signal()  # 窗口关闭信号
+    
     def __init__(self):
         super().__init__()
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
@@ -97,7 +102,7 @@ class DiagnosticsWindow(QWidget):
         # 关闭按钮
         self.btn_close = StyledButton("✕", button_type="close")
         self.btn_close.setFixedSize(32, 32)
-        self.btn_close.clicked.connect(self.hide)
+        self.btn_close.clicked.connect(self._on_close)
         header_layout.addWidget(self.btn_close)
         main_layout.addLayout(header_layout)
 
@@ -165,7 +170,7 @@ class DiagnosticsWindow(QWidget):
         self.btn_enter = StyledButton("进入主界面", button_type="primary")
         self.btn_enter.setFixedSize(150, 45)
         self.btn_enter.setEnabled(False)
-        self.btn_enter.clicked.connect(self.hide)
+        self.btn_enter.clicked.connect(self._on_enter_main)
 
         footer.addWidget(self.btn_run)
         footer.addWidget(self.btn_enter)
@@ -285,3 +290,13 @@ class DiagnosticsWindow(QWidget):
         """鼠标移动事件 - 实现窗口拖动"""
         if event.buttons() == Qt.LeftButton:
             self.move(event.globalPosition().toPoint() - self._drag_pos)
+            
+    def _on_enter_main(self):
+        """进入主界面按钮"""
+        self.enter_main_requested.emit()
+        self.hide()
+        
+    def _on_close(self):
+        """关闭窗口"""
+        self.closed.emit()
+        self.hide()

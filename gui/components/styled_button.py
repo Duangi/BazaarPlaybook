@@ -24,8 +24,8 @@ class StyledButton(QPushButton):
                     border: none;
                     border-radius: 6px;
                     font-size: 16px;
-                    font-weight: bold;
-                    padding: 8px 16px;
+                    font-weight: 700;
+                    padding: 8px 18px;
                 }
                 StyledButton:hover {
                     background: qlineargradient(x1:0, y1:0, x2:0, y2:1, 
@@ -33,6 +33,8 @@ class StyledButton(QPushButton):
                 }
                 StyledButton:pressed {
                     background: #e6b800;
+                    font-weight: 700;
+                    padding: 8px 18px;
                 }
                 StyledButton:disabled {
                     background: #3d352f;
@@ -47,8 +49,8 @@ class StyledButton(QPushButton):
                     border: 2px solid #ffcc00;
                     border-radius: 6px;
                     font-size: 16px;
-                    font-weight: bold;
-                    padding: 8px 16px;
+                    font-weight: 700;
+                    padding: 8px 18px;
                 }
                 StyledButton:hover {
                     background: rgba(255, 204, 0, 0.25);
@@ -57,6 +59,8 @@ class StyledButton(QPushButton):
                 }
                 StyledButton:pressed {
                     background: rgba(255, 204, 0, 0.35);
+                    font-weight: 700;
+                    padding: 8px 18px;
                 }
                 StyledButton:disabled {
                     background: rgba(61, 53, 47, 0.3);
@@ -71,7 +75,7 @@ class StyledButton(QPushButton):
                     color: #888888;
                     border: none;
                     font-size: 20px;
-                    font-weight: bold;
+                    font-weight: 700;
                 }
                 StyledButton:hover {
                     color: #ff4444;
@@ -80,6 +84,7 @@ class StyledButton(QPushButton):
                 }
                 StyledButton:pressed {
                     background: rgba(255, 68, 68, 0.2);
+                    font-weight: 700;
                 }
             """)
 

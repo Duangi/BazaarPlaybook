@@ -7,3 +7,4 @@ pywin32
 
 rapidocr_onnxruntime
 rapidfuzz
+zhconv

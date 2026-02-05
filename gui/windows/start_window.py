@@ -8,6 +8,7 @@ from gui.components.styled_button import StyledButton
 
 class StartWindow(QWidget):
     entered = Signal()
+    diagnostic_requested = Signal()  # 新增：手动自检信号
 
     def __init__(self):
         super().__init__()
@@ -104,21 +105,33 @@ class StartWindow(QWidget):
         
         container_layout.addStretch()
 
-        # 底部进入按钮
+        # 底部按钮区域
         button_layout = QHBoxLayout()
+        button_layout.setSpacing(12)
         button_layout.addStretch()
         
-        self.btn_enter = StyledButton("启动助手", button_type="primary")
-        self.btn_enter.setFixedSize(220, 50)
-        self.btn_enter.clicked.connect(self._on_enter)
+        # 手动自检按钮
+        self.btn_diagnostic = StyledButton("🔍 手动自检", button_type="secondary")
+        self.btn_diagnostic.setFixedSize(140, 50)
+        self.btn_diagnostic.clicked.connect(self._on_diagnostic)
+        button_layout.addWidget(self.btn_diagnostic)
         
+        # 启动助手按钮
+        self.btn_enter = StyledButton("🚀 启动助手", button_type="primary")
+        self.btn_enter.setFixedSize(140, 50)
+        self.btn_enter.clicked.connect(self._on_enter)
         button_layout.addWidget(self.btn_enter)
+        
         button_layout.addStretch()
         container_layout.addLayout(button_layout)
 
     def _on_enter(self):
         self.entered.emit()
-        self.close()
+        # 不再自动关闭，由主程序决定
+        
+    def _on_diagnostic(self):
+        """手动自检按钮"""
+        self.diagnostic_requested.emit()
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:

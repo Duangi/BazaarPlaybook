@@ -1,11 +1,22 @@
 # gui/styles.py
 
-COLOR_GOLD = "#ffcc00"
-COLOR_GOLD_HOVER = "#ffdb4d"
-COLOR_BG_MAIN = "#241f1c"    # 更深一点的褐色
-COLOR_BG_DARK = "#0f0e0d"    # 接近纯黑
-COLOR_TEXT_PRIMARY = "#f0f0f0"
-COLOR_TEXT_DIM = "#888888"
+# --- 1. 颜色常量 (Colors) ---
+COLOR_GOLD           = "#f59e0b"    # 现代琥珀金色
+COLOR_GOLD_DARK      = "#d97706"    # 深琥珀色
+COLOR_GOLD_HOVER     = "#fbbf24"    # 浅琥珀色（悬停）
+COLOR_BG_MAIN        = "#241f1c"    # 深褐色基调
+COLOR_BG_DARK        = "#0f0e0d"    # 接近纯黑
+COLOR_BG_NAV         = "rgba(10, 10, 10, 0.95)"  # 侧边栏背景
+COLOR_BG_CONTENT     = "#121212"    # 内容区背景
+COLOR_TEXT_PRIMARY   = "#f0f0f0"
+COLOR_TEXT_DIM       = "#888888"
+COLOR_BORDER_SUBTLE  = "rgba(245, 158, 11, 0.15)"  # 更新边框颜色
+
+# --- 2. 尺寸常量 (Dimensions - 基础值，未缩放) ---
+NAV_WIDTH_COLLAPSED = 65
+NAV_WIDTH_EXPANDED  = 200
+TITLE_BAR_HEIGHT    = 50
+WINDOW_RADIUS       = 12
 
 # 全局滚动条样式 - 圆润美观版
 SCROLLBAR_STYLE = f"""
@@ -204,3 +215,127 @@ DIAGNOSTICS_STYLE = GLOBAL_STYLE + f"""
     background: rgba(255, 204, 0, 0.4);
 }}
 """
+
+def get_sidebar_style(scale=1.0):
+    """根据缩放系数生成动态 QSS - Mobalytics 风格"""
+    f_title = int(14 * scale)
+    f_btn = int(13 * scale)
+    radius = int(16 * scale)
+    title_h = int(50 * scale)
+    nav_w_collapsed = int(60 * scale)
+
+    return f"""
+    /* 全局基础：强制指定中文字体 */
+    QWidget {{
+        color: {COLOR_TEXT_PRIMARY};
+        font-family: "Segoe UI", "Microsoft YaHei UI", "Inter", sans-serif;
+        font-weight: 500;
+    }}
+
+    /* 主外壳 */
+    #SidebarMain {{
+        background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+            stop:0 rgba(18, 18, 20, 0.98),
+            stop:1 rgba(10, 10, 12, 0.98));
+        border: 1px solid rgba(255, 204, 0, 0.1);
+        border-radius: {radius}px;
+    }}
+
+    /* 顶部标题栏 */
+    #TitleBar {{
+        background: rgba(15, 15, 17, 0.95);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        border-top-left-radius: {radius}px;
+        border-top-right-radius: {radius}px;
+    }}
+
+    #AppTitle {{
+        color: rgba(255, 255, 255, 0.95);
+        font-size: {f_title}px;
+        font-weight: 700;
+        letter-spacing: 2px;
+    }}
+
+    /* 语言切换按钮 */
+    #LangButton {{
+        background: rgba(40, 40, 45, 0.8);
+        color: #cccccc;
+        font-size: {int(10*scale)}px;
+        font-weight: 600;
+        border: 1px solid rgba(255, 204, 0, 0.2);
+        border-radius: 6px;
+    }}
+    #LangButton:hover {{
+        background: rgba(50, 50, 55, 0.9);
+        border: 1px solid rgba(255, 204, 0, 0.4);
+        color: #ffcc00;
+    }}
+
+    /* 侧边栏 - 悬浮层 */
+    #NavRail {{
+        background: {COLOR_BG_NAV};
+        border-right: 1px solid rgba(255, 204, 0, 0.08);
+        border-bottom-left-radius: {radius}px;
+    }}
+
+    /* ✅ 右下角调整大小手柄 */
+    QSizeGrip {{
+        background: transparent;
+        width: 20px;
+        height: 20px;
+        image: url(none);  /* 移除默认图标 */
+    }}
+    
+    QSizeGrip:hover {{
+        background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+            stop:0 rgba(255, 204, 0, 0.1),
+            stop:1 rgba(255, 204, 0, 0.3));
+        border-top-left-radius: 4px;
+    }}
+
+    /* 导航按钮 */
+    .NavButton {{
+        background: transparent;
+        border: none;
+        border-left: 3px solid transparent;  /* 预留左侧边框位置 */
+        color: {COLOR_TEXT_DIM};  /* 默认白色，与图标颜色一致 */
+        font-size: {int(13*scale)}px;  /* 文字字体大小 */
+        font-weight: 600;
+        text-align: left;
+        padding-left: {int(8*scale)}px;  /* 减少左侧内边距，让图标更靠左 */
+        border-radius: {int(8*scale)}px;
+        margin: 0px {int(6*scale)}px;
+    }}
+
+    .NavButton:hover {{
+        color: white;
+        background: rgba(255, 255, 255, 0.05);
+    }}
+
+    /* 激活状态：金色左边框 + 渐变背景 */
+    .NavButton:checked {{
+        color: {COLOR_GOLD};  /* 选中时文字变金色 */
+        background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+            stop:0 rgba(255, 204, 0, 0.15),
+            stop:1 transparent);
+        border-left: 3px solid {COLOR_GOLD};
+    }}
+
+    #CollapseBtn {{
+        color: rgba(255, 255, 255, 0.5);
+        background: transparent;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 6px;
+        margin-right: 10px;
+    }}
+
+    QToolTip {{
+        background-color: #000;
+        color: {COLOR_GOLD};
+        border: 1px solid {COLOR_GOLD};
+        padding: 5px;
+        border-radius: 4px;
+    }}
+    
+    {SCROLLBAR_STYLE}
+    """
