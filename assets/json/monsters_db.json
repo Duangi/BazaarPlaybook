@@ -232,6 +232,12 @@
             "cd": "5.0"
           }
         }
+      },
+      {
+        "id": "4826832f-f3a5-4c40-b8fa-737f002074fa",
+        "name": "虫翅",
+        "tier": "Silver+",
+        "current_tier": "Silver"
       }
     ],
     "id": "bd0711a6-d9d9-4a47-8a18-8f991057f7dd"
@@ -306,7 +312,7 @@
         "name": "余烬",
         "name_en": "",
         "tier": "Bronze+",
-        "current_tier": "Silver",
+        "current_tier": "Bronze",
         "tags": [
           "LOOT"
         ],
@@ -381,6 +387,11 @@
             "cd": "3.0"
           }
         }
+      },
+      {
+        "id": "78e3ec16-b331-4aa7-a54c-13b2f5345e59",
+        "name": "燃烧炸弹",
+        "current_tier": "Bronze"
       },
       {
         "id": "d45bb1dd-5342-4c69-b7fe-f56d3fac7d1f",
@@ -1131,9 +1142,10 @@
       },
       {
         "id": "7cbc8056-482b-4ccf-887a-ddb2702c856c",
-        "name": "毒性蔓延 獠牙",
+        "name": "毒素 獠牙",
         "tier": "Bronze+",
         "current_tier": "Bronze",
+        "enchantment": "Toxic",
         "tags": [
           "WEAPON"
         ],
@@ -2077,8 +2089,8 @@
         }
       },
       {
-        "id": "77c8ef2d-62c8-4214-993d-648915c93e83",
-        "name": "神庙探险券",
+        "id": "5bd0a69d-420c-4cd0-93ec-07582c688a5b",
+        "name": "坠落地点探险券",
         "tier": "Legendary",
         "current_tier": "Legendary",
         "tags": [],
@@ -2635,6 +2647,11 @@
         }
       },
       {
+        "id": "7bff4c56-752c-47f3-89d0-e85aa917319f",
+        "name": "激光手枪",
+        "current_tier":"Silver"
+      },
+      {
         "id": "f8b41c46-8adc-4e84-835a-831e2e3d84d1",
         "name": "护目镜",
         "tier": "BRONZE+",
@@ -2683,6 +2700,7 @@
           }
         }
       },
+
       {
         "id": "1bdbc6f6-2690-445a-877e-90dbbd5e4658",
         "name": "尖刺铁丝网",
@@ -3175,10 +3193,16 @@
     ],
     "items": [
       {
+        "id": "5bd0a69d-420c-4cd0-93ec-07582c688a5b",
+        "name": "坠落地点探险券",
+        "tier": "LEGENDARY",
+        "current_tier": "Legendary"
+      },
+      {
         "id": "df87dc00-f0fe-4e47-b864-ad6b4bfea81a",
         "name": "瓶装闪电",
         "tier": "BRONZE+",
-        "current_tier": "Bronze",
+        "current_tier": "Silver",
         "tags": [
           "POTION",
           "WEAPON",
@@ -3280,7 +3304,7 @@
         "id": "cf3a7956-f400-42e1-bae1-d3678d76fd01",
         "name": "火焰药水",
         "tier": "BRONZE+",
-        "current_tier": "Bronze",
+        "current_tier": "Silver",
         "tags": [
           "POTION",
           "MAK"
@@ -3317,43 +3341,6 @@
             ],
             "extra_description": [],
             "cd": "5.0"
-          }
-        }
-      },
-      {
-        "id": "77c8ef2d-62c8-4214-993d-648915c93e83",
-        "name": "神庙探险券",
-        "tier": "LEGENDARY",
-        "current_tier": "Legendary",
-        "tags": [],
-        "tiers": {
-          "bronze": {
-            "description": [
-              "第9天可使用此物品，开启神庙探险。"
-            ],
-            "extra_description": [],
-            "cd": null
-          },
-          "silver": {
-            "description": [
-              "第9天可使用此物品，开启神庙探险。"
-            ],
-            "extra_description": [],
-            "cd": null
-          },
-          "gold": {
-            "description": [
-              "第9天可使用此物品，开启神庙探险。"
-            ],
-            "extra_description": [],
-            "cd": null
-          },
-          "diamond": {
-            "description": [
-              "第9天可使用此物品，开启神庙探险。"
-            ],
-            "extra_description": [],
-            "cd": null
           }
         }
       },
@@ -3462,7 +3449,7 @@
         "id": "d45bb1dd-5342-4c69-b7fe-f56d3fac7d1f",
         "name": "余烬",
         "tier": "BRONZE+",
-        "current_tier": "Silver",
+        "current_tier": "Bronze",
         "tags": [
           "LOOT"
         ],
@@ -3679,7 +3666,7 @@
         "id": "dc3bf5cb-45fa-46c7-9a0e-3f3bfb01697d",
         "name": "磨刀石",
         "tier": "BRONZE+",
-        "current_tier": "Silver",
+        "current_tier": "Bronze",
         "tags": [
           "LOOT"
         ],
@@ -5005,55 +4992,10 @@
         }
       },
       {
-        "id": "",
-        "name": "冻结殴打",
+        "id": "53b62ecb-bcbc-4a86-bd6f-027467970109",
+        "name": "冰冻钝器",
         "tier": "BRONZE+",
-        "current_tier": "Silver",
-        "tags": [
-          "WEAPON"
-        ],
-        "tiers": {
-          "bronze": {
-            "description": [
-              "造成 20 伤害",
-              "冻结 1 件物品1秒"
-            ],
-            "extra_description": [
-              "触发冻结时，己方武器伤害提高 5 (限本场战斗)。"
-            ],
-            "cd": "9.0"
-          },
-          "silver": {
-            "description": [
-              "造成 40 伤害",
-              "冻结 2 件物品1秒"
-            ],
-            "extra_description": [
-              "触发冻结时，己方武器伤害提高 10 (限本场战斗)。"
-            ],
-            "cd": "9.0"
-          },
-          "gold": {
-            "description": [
-              "造成 60 伤害",
-              "冻结 3 件物品1秒"
-            ],
-            "extra_description": [
-              "触发冻结时，己方武器伤害提高 15 (限本场战斗)。"
-            ],
-            "cd": "9.0"
-          },
-          "diamond": {
-            "description": [
-              "造成 80 伤害",
-              "冻结 4 件物品1秒"
-            ],
-            "extra_description": [
-              "触发冻结时，己方武器伤害提高 20 (限本场战斗)。"
-            ],
-            "cd": "9.0"
-          }
-        }
+        "current_tier": "Silver"
       },
       {
         "id": "4680e750-4ea4-421a-b486-194c805ad6a8",
@@ -5637,9 +5579,10 @@
       },
       {
         "id": "85bbf340-b66e-4c27-9d62-4f6181f1a6a5",
-        "name": "毒性蔓延 面包",
+        "name": "面包",
         "tier": "SILVER+",
         "current_tier": "Silver",
+        "enchantment": "Toxic",
         "tags": [
           "FOOD",
           "JUL"

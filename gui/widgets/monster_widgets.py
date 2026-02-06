@@ -5,7 +5,7 @@
 from typing import Dict
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
                                QPushButton, QFrame, QScrollArea, QGridLayout)
-from PySide6.QtCore import Qt, Signal, QSize
+from PySide6.QtCore import Qt, Signal, QSize, QTimer
 from PySide6.QtGui import QPixmap, QFont
 from data_manager.monster_loader import Monster
 from utils.i18n import get_i18n
@@ -18,11 +18,22 @@ class MonsterCard(QFrame):
     显示：怪物图片、名字、血量
     """
     clicked = Signal(Monster)  # 点击时发送怪物对象
+    hovered = Signal(Monster)  # 悬浮时发送怪物对象
+    hover_leave = Signal()     # 离开时发送信号
     
     def __init__(self, monster: Monster, parent=None):
         super().__init__(parent)
         self.monster = monster
         self.i18n = get_i18n()
+        
+        # 悬浮定时器（200ms 后触发）
+        self.hover_timer = QTimer(self)
+        self.hover_timer.setSingleShot(True)
+        self.hover_timer.setInterval(200)
+        self.hover_timer.timeout.connect(self._on_hover_timeout)
+        
+        self.setMouseTracking(True)
+        
         self._init_ui()
         self._setup_style()
     
@@ -116,6 +127,21 @@ class MonsterCard(QFrame):
                 color: #f0f0f0;
             }
         """)
+    
+    def enterEvent(self, event):
+        """鼠标进入 - 启动悬浮定时器"""
+        self.hover_timer.start()
+        super().enterEvent(event)
+    
+    def leaveEvent(self, event):
+        """鼠标离开 - 取消定时器并发送离开信号"""
+        self.hover_timer.stop()
+        self.hover_leave.emit()
+        super().leaveEvent(event)
+    
+    def _on_hover_timeout(self):
+        """悬浮定时器超时 - 发送悬浮信号"""
+        self.hovered.emit(self.monster)
     
     def mousePressEvent(self, event):
         """鼠标点击事件"""

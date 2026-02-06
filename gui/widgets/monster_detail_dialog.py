@@ -5,8 +5,8 @@
 from typing import Dict
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
                                QPushButton, QFrame, QScrollArea, QGridLayout)
-from PySide6.QtCore import Qt, Signal, QSize
-from PySide6.QtGui import QPixmap, QFont, QPainter
+from PySide6.QtCore import Qt, Signal, QSize, QTimer
+from PySide6.QtGui import QPixmap, QFont, QPainter, QCursor
 from data_manager.monster_loader import Monster
 from utils.i18n import get_i18n
 from gui.utils.frameless_helper import FramelessHelper
@@ -18,10 +18,10 @@ import json
 
 class MonsterDetailDialog(QWidget):
     """
-    怪物详情弹窗
-    - 可拖拽
-    - 可调整大小
-    - 显示完整怪物信息
+    怪物详情悬浮窗
+    - 鼠标悬浮在怪物卡片上显示
+    - 可以鼠标移入交互
+    - 鼠标移出自动隐藏
     """
     
     closed = Signal()  # 关闭信号
@@ -30,30 +30,28 @@ class MonsterDetailDialog(QWidget):
         super().__init__(parent)
         self.current_monster: Monster = None
         self.i18n = get_i18n()
+        self.parent_widget = parent
+        self.setMouseTracking(True)  # 启用鼠标追踪
+        
+        # 延迟关闭定时器
+        self.close_timer = QTimer(self)
+        self.close_timer.setSingleShot(True)
+        self.close_timer.timeout.connect(self.close_dialog)
+        
         self._init_window()
         self._init_ui()
-        
-        # 安装事件过滤器到父窗口，监听全局点击
-        if parent:
-            parent.installEventFilter(self)
     
     def _init_window(self):
         """初始化窗口属性"""
-        self.setWindowFlags(Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint | Qt.WindowStaysOnTopHint)
-        self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setMinimumSize(500, 600)
-        self.setMaximumSize(800, 1000)
-        self.resize(650, 750)
-        
-        # 启用拖拽和调整大小
-        self.frameless_helper = FramelessHelper(
-            self,
-            margin=5,
-            snap_to_top=False,
-            enable_drag=True,
-            enable_resize=True,
-            debug=False
+        # 使用 ToolTip 样式的窗口
+        self.setWindowFlags(
+            Qt.WindowType.ToolTip | 
+            Qt.WindowType.FramelessWindowHint |
+            Qt.WindowType.WindowStaysOnTopHint
         )
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setAttribute(Qt.WA_ShowWithoutActivating)  # 显示时不激活焦点
+        self.setFixedSize(550, 650)  # 固定大小的悬浮窗
     
     def _init_ui(self):
         """初始化 UI"""
@@ -69,7 +67,7 @@ class MonsterDetailDialog(QWidget):
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
                     stop:0 rgba(25, 25, 28, 0.98),
                     stop:1 rgba(15, 15, 18, 0.98));
-                border: 2px solid rgba(255, 204, 0, 0.4);
+                border: none;
                 border-radius: 12px;
             }
         """)
@@ -94,13 +92,78 @@ class MonsterDetailDialog(QWidget):
         scroll.setWidget(self.content_widget)
         container_layout.addWidget(scroll)
     
-    def show_monster(self, monster: Monster):
-        """显示怪物详情"""
+    def show_monster(self, monster: Monster, anchor_pos=None):
+        """
+        显示怪物详情
+        Args:
+            monster: 怪物对象
+            anchor_pos: 锚点位置（QPoint 全局坐标），如果为 None 则显示在鼠标附近
+        """
         self.current_monster = monster
         self._update_content()
+        
+        # 智能定位：确保不超出屏幕边界
+        if anchor_pos:
+            self._position_near(anchor_pos)
+        else:
+            from PySide6.QtGui import QCursor
+            self._position_near(QCursor.pos())
+        
         self.show()
         self.raise_()
-        self.activateWindow()
+    
+    def set_monster_data(self, monster: Monster):
+        """
+        设置怪物数据（不显示窗口，用于抽屉面板）
+        Args:
+            monster: 怪物对象
+        """
+        self.current_monster = monster
+        self._update_content()
+    
+    def _position_near(self, anchor_pos):
+        """
+        在锚点附近智能定位，避免超出屏幕边界
+        Args:
+            anchor_pos: QPoint 全局坐标
+        """
+        from PySide6.QtWidgets import QApplication
+        
+        screen = QApplication.primaryScreen().availableGeometry()
+        dialog_width = self.width()
+        dialog_height = self.height()
+        
+        # 默认显示在锚点右侧，稍微偏下
+        x = anchor_pos.x() + 20
+        y = anchor_pos.y() - 50
+        
+        # 检查右侧边界，如果超出则显示在左侧
+        if x + dialog_width > screen.right():
+            x = anchor_pos.x() - dialog_width - 20
+        
+        # 检查左侧边界
+        if x < screen.left():
+            x = screen.left() + 10
+        
+        # 检查底部边界
+        if y + dialog_height > screen.bottom():
+            y = screen.bottom() - dialog_height - 10
+        
+        # 检查顶部边界
+        if y < screen.top():
+            y = screen.top() + 10
+        
+        self.move(x, y)
+    
+    def enterEvent(self, event):
+        """鼠标进入详情窗口 - 取消关闭"""
+        self.close_timer.stop()
+        super().enterEvent(event)
+    
+    def leaveEvent(self, event):
+        """鼠标离开详情窗口 - 延迟500ms关闭"""
+        self.close_timer.start(500)
+        super().leaveEvent(event)
     
     def _update_content(self):
         """更新详情内容"""
@@ -120,20 +183,21 @@ class MonsterDetailDialog(QWidget):
         header_card = QFrame()
         header_card.setStyleSheet("""
             QFrame {
-                background: rgba(40, 40, 45, 0.6);
-                border: 1px solid rgba(245, 158, 11, 0.3);
-                border-radius: 8px;
-                padding: 15px;
+                background: transparent;
+                border: none;
+                padding: 0px;
             }
         """)
         header_layout = QHBoxLayout(header_card)
         header_layout.setSpacing(15)
+        header_layout.setContentsMargins(0, 0, 0, 0)
         
         # 怪物头像（左侧，70x70）
         avatar_label = QLabel()
         avatar_label.setFixedSize(70, 70)
-        from utils.image_loader import load_monster_avatar
-        pixmap = load_monster_avatar(m.name_zh, size=70)
+        avatar_label.setStyleSheet("border: none; background: transparent;")
+        from utils.image_loader import ImageLoader
+        pixmap = ImageLoader.load_monster_image(m.name_zh, size=70, with_border=True)
         avatar_label.setPixmap(pixmap)
         header_layout.addWidget(avatar_label)
         
@@ -217,22 +281,28 @@ class MonsterDetailDialog(QWidget):
         for item in items:
             item_id = item.get("id", "")
             
-            # 从数据库获取物品信息（主要是 size）
+            # 从数据库获取物品信息
             item_data = self._load_item_from_db(item_id)
             if not item_data:
                 continue
             
             # 获取物品大小
             size_str = item_data.get("size", "Medium / 中型")
-            # 解析 size（格式："Large / 大型"）
             size_en = size_str.split("/")[0].strip().lower()
             
             if "small" in size_en:
                 card_size = CardSize.SMALL
+                size_suffix = "S"
             elif "large" in size_en:
                 card_size = CardSize.LARGE
+                size_suffix = "L"
             else:
                 card_size = CardSize.MEDIUM
+                size_suffix = "M"
+            
+            # 获取品级（从 tier 字段或 starting_tier）
+            tier = item_data.get("tier", item_data.get("starting_tier", "Bronze"))
+            tier = tier.split("/")[0].strip()  # 可能是 "Bronze / 青铜" 格式
             
             # 计算图片尺寸
             height = 80
@@ -243,20 +313,44 @@ class MonsterDetailDialog(QWidget):
             else:
                 width = height
             
-            # 创建物品图标
-            item_icon = QLabel()
-            item_icon.setFixedSize(width, height)
+            # 创建物品图标容器（使用 QLabel 叠加）
+            item_container = QLabel()
+            item_container.setFixedSize(width, height)
+            item_container.setStyleSheet("border: none; background: transparent;")
             
-            # 使用 ImageLoader 加载物品图片（带绿色边框）
-            pixmap = ImageLoader.load_card_image(
+            # 加载物品图片
+            card_pixmap = ImageLoader.load_card_image(
                 card_id=item_id,
                 card_size=card_size,
                 height=height,
-                with_border=True
+                with_border=False
             )
-            item_icon.setPixmap(pixmap)
             
-            items_layout.addWidget(item_icon)
+            # 加载品级边框图片
+            frame_path = f"assets/images/GUI/CardFrame_{tier}_{size_suffix}_TUI.webp"
+            if os.path.exists(frame_path):
+                # 合成图片：底层是卡牌，上层是边框
+                from PySide6.QtGui import QPainter, QPixmap as QP
+                
+                result = QPixmap(width, height)
+                result.fill(Qt.GlobalColor.transparent)
+                
+                painter = QPainter(result)
+                # 绘制物品图片
+                painter.drawPixmap(0, 0, width, height, card_pixmap)
+                
+                # 加载并绘制边框
+                frame_pixmap = QPixmap(frame_path)
+                if not frame_pixmap.isNull():
+                    painter.drawPixmap(0, 0, width, height, frame_pixmap)
+                
+                painter.end()
+                item_container.setPixmap(result)
+            else:
+                # 如果边框不存在，只显示物品图片
+                item_container.setPixmap(card_pixmap)
+            
+            items_layout.addWidget(item_container)
         
         items_layout.addStretch()
         self.content_layout.addWidget(items_container)
@@ -265,21 +359,7 @@ class MonsterDetailDialog(QWidget):
         """关闭弹窗"""
         self.closed.emit()
         self.hide()
-    
-    def eventFilter(self, obj, event):
-        """事件过滤器 - 检测点击外部关闭"""
-        if event.type() == event.Type.MouseButtonPress:
-            # 检查点击位置是否在对话框之外
-            click_pos = event.globalPosition().toPoint()
-            dialog_rect = self.geometry()
-            
-            if not dialog_rect.contains(click_pos):
-                # 点击在对话框外部，关闭对话框
-                self.close_dialog()
-                return True
-        
-        return super().eventFilter(obj, event)
-    
+
     def update_language(self):
         """更新语言"""
         if self.current_monster:

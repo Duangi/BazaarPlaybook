@@ -337,5 +337,202 @@ def get_sidebar_style(scale=1.0):
         border-radius: 4px;
     }}
     
+    /* === 设置页面样式 === */
+    QScrollArea {{
+        background: transparent;
+        border: none;
+    }}
+    
+    QScrollArea > QWidget > QWidget {{
+        background: transparent;
+    }}
+    
+    #PageTitle {{
+        color: {COLOR_TEXT_PRIMARY};
+        padding-bottom: {int(10*scale)}px;
+        border-bottom: 2px solid {COLOR_BORDER_SUBTLE};
+    }}
+    
+    #SettingGroup {{
+        background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+            stop:0 rgba(245, 158, 11, 0.08),
+            stop:1 rgba(245, 158, 11, 0.02));
+        border: 1px solid {COLOR_BORDER_SUBTLE};
+        border-radius: {int(12*scale)}px;
+        padding: {int(5*scale)}px;
+    }}
+    
+    #SettingDesc {{
+        color: {COLOR_TEXT_DIM};
+        font-size: {int(11*scale)}px;
+        padding-bottom: {int(5*scale)}px;
+    }}
+    
+    #ScaleButton {{
+        background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+            stop:0 rgba(245, 158, 11, 0.15),
+            stop:1 rgba(245, 158, 11, 0.08));
+        color: {COLOR_GOLD};
+        border: 2px solid {COLOR_BORDER_SUBTLE};
+        border-radius: {int(8*scale)}px;
+        font-size: {int(20*scale)}px;
+        font-weight: bold;
+    }}
+    
+    #ScaleButton:hover {{
+        background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+            stop:0 rgba(245, 158, 11, 0.25),
+            stop:1 rgba(245, 158, 11, 0.15));
+        border-color: {COLOR_GOLD};
+    }}
+    
+    #ScaleButton:pressed {{
+        background: rgba(245, 158, 11, 0.35);
+    }}
+    
+    #ScaleValue {{
+        color: {COLOR_GOLD};
+        background: rgba(245, 158, 11, 0.1);
+        border: 1px solid {COLOR_BORDER_SUBTLE};
+        border-radius: {int(6*scale)}px;
+        padding: {int(8*scale)}px;
+    }}
+    
+    #PresetButton {{
+        background: rgba(255, 255, 255, 0.05);
+        color: {COLOR_TEXT_PRIMARY};
+        border: 1px solid {COLOR_BORDER_SUBTLE};
+        border-radius: {int(6*scale)}px;
+        padding: {int(6*scale)}px {int(12*scale)}px;
+        font-size: {int(11*scale)}px;
+    }}
+    
+    #PresetButton:hover {{
+        background: rgba(245, 158, 11, 0.15);
+        border-color: {COLOR_GOLD};
+        color: {COLOR_GOLD};
+    }}
+    
+    #PresetButton:pressed {{
+        background: rgba(245, 158, 11, 0.25);
+    }}
+    
+    #LanguageRadio {{
+        color: {COLOR_TEXT_PRIMARY};
+        font-size: {int(12*scale)}px;
+        spacing: {int(8*scale)}px;
+    }}
+    
+    #LanguageRadio::indicator {{
+        width: {int(18*scale)}px;
+        height: {int(18*scale)}px;
+        border-radius: {int(9*scale)}px;
+        border: 2px solid {COLOR_BORDER_SUBTLE};
+        background: transparent;
+    }}
+    
+    #LanguageRadio::indicator:checked {{
+        background: qradialgradient(cx:0.5, cy:0.5, radius:0.5,
+            fx:0.5, fy:0.5,
+            stop:0 {COLOR_GOLD},
+            stop:0.6 {COLOR_GOLD},
+            stop:0.7 transparent);
+        border-color: {COLOR_GOLD};
+    }}
+    
+    #LanguageRadio:hover {{
+        color: {COLOR_GOLD};
+    }}
+    
+    #CollapseCheckbox {{
+        color: {COLOR_TEXT_PRIMARY};
+        font-size: {int(12*scale)}px;
+        spacing: {int(8*scale)}px;
+    }}
+    
+    #CollapseCheckbox::indicator {{
+        width: {int(20*scale)}px;
+        height: {int(20*scale)}px;
+        border-radius: {int(4*scale)}px;
+        border: 2px solid {COLOR_BORDER_SUBTLE};
+        background: transparent;
+    }}
+    
+    #CollapseCheckbox::indicator:checked {{
+        background: {COLOR_GOLD};
+        border-color: {COLOR_GOLD};
+        image: url(data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJNMTMuMzMzMyA0TDYgMTEuMzMzM0wyLjY2NjY3IDgiIHN0cm9rZT0iYmxhY2siIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+PC9zdmc+);
+    }}
+    
+    #CollapseCheckbox:hover {{
+        color: {COLOR_GOLD};
+    }}
+    
+    #DelaySpinbox {{
+        background: rgba(255, 255, 255, 0.05);
+        color: {COLOR_TEXT_PRIMARY};
+        border: 1px solid {COLOR_BORDER_SUBTLE};
+        border-radius: {int(6*scale)}px;
+        padding: {int(6*scale)}px;
+        font-size: {int(12*scale)}px;
+    }}
+    
+    #DelaySpinbox:focus {{
+        border-color: {COLOR_GOLD};
+    }}
+    
+    #DelaySpinbox::up-button, #DelaySpinbox::down-button {{
+        background: rgba(245, 158, 11, 0.1);
+        border: none;
+        border-radius: {int(3*scale)}px;
+        width: {int(16*scale)}px;
+    }}
+    
+    #DelaySpinbox::up-button:hover, #DelaySpinbox::down-button:hover {{
+        background: rgba(245, 158, 11, 0.2);
+    }}
+    
+    #DelaySpinbox::up-arrow {{
+        image: url(data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIiIGhlaWdodD0iMTIiIHZpZXdCb3g9IjAgMCAxMiAxMiIgZmlsbD0ibm9uZSIgeG1zbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJNMyA4TDYgNUw5IDgiIHN0cm9rZT0iI2Y1OWUwYiIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjwvc3ZnPg==);
+        width: {int(12*scale)}px;
+        height: {int(12*scale)}px;
+    }}
+    
+    #DelaySpinbox::down-arrow {{
+        image: url(data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIiIGhlaWdodD0iMTIiIHZpZXdCb3g9IjAgMCAxMiAxMiIgZmlsbD0ibm9uZSIgeG1zbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJNOSA1TDYgOEwzIDUiIHN0cm9rZT0iI2Y1OWUwYiIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjwvc3ZnPg==);
+        width: {int(12*scale)}px;
+        height: {int(12*scale)}px;
+    }}
+    
+    QSlider::groove:horizontal {{
+        height: {int(6*scale)}px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: {int(3*scale)}px;
+    }}
+    
+    QSlider::handle:horizontal {{
+        width: {int(18*scale)}px;
+        height: {int(18*scale)}px;
+        margin: {int(-6*scale)}px 0;
+        background: qradialgradient(cx:0.5, cy:0.5, radius:0.5,
+            stop:0 {COLOR_GOLD},
+            stop:0.8 {COLOR_GOLD},
+            stop:1 {COLOR_GOLD_DARK});
+        border: 2px solid {COLOR_GOLD_HOVER};
+        border-radius: {int(9*scale)}px;
+    }}
+    
+    QSlider::handle:horizontal:hover {{
+        background: {COLOR_GOLD_HOVER};
+        transform: scale(1.1);
+    }}
+    
+    QSlider::sub-page:horizontal {{
+        background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+            stop:0 {COLOR_GOLD_DARK},
+            stop:1 {COLOR_GOLD});
+        border-radius: {int(3*scale)}px;
+    }}
+    
     {SCROLLBAR_STYLE}
     """

@@ -1,0 +1,458 @@
+{
+  "matches": [
+    {
+      "match_id": "f27eee1f-606b-4b50-a0f1-ae787f16001a",
+      "hero": "Vanessa",
+      "start_time": "2024-01-15 14:30:00",
+      "end_time": "2024-01-15 15:45:00",
+      "days": 13,
+      "victory": true,
+      "is_finished": true,
+      "created_at": "2026-02-06T16:34:26.790959",
+      "pvp_battles": [
+        {
+          "day": 1,
+          "start_time": "2024-01-15 14:31:00",
+          "victory": true,
+          "player_items": [
+            {
+              "instance_id": "itm_test_1_1",
+              "template_id": "012658f4-b289-4f10-917c-a9a1f3f9ca03",
+              "location": "PlayerSocket",
+              "socket": 0
+            },
+            {
+              "instance_id": "itm_test_1_2",
+              "template_id": "0229faa7-2eec-4746-9134-ade4f3aebe45",
+              "location": "PlayerSocket",
+              "socket": 1
+            },
+            {
+              "instance_id": "itm_test_1_3",
+              "template_id": "027ef534-d047-4e18-8496-d9fd4773e15d",
+              "location": "PlayerSocket",
+              "socket": 2
+            }
+          ],
+          "opponent_items": [
+            {
+              "instance_id": "itm_opp_1_1",
+              "template_id": "004cb876-1ed2-4a4b-88d4-475cea76a03d",
+              "location": "OpponentSocket",
+              "socket": 0
+            }
+          ],
+          "screenshot": "D:\\Projects\\Reborn\\tests\\assets\\Jules1.png"
+        },
+        {
+          "day": 2,
+          "start_time": "2024-01-15 14:32:00",
+          "victory": false,
+          "player_items": [
+            {
+              "instance_id": "itm_test_2_1",
+              "template_id": "0229faa7-2eec-4746-9134-ade4f3aebe45",
+              "location": "PlayerSocket",
+              "socket": 0
+            },
+            {
+              "instance_id": "itm_test_2_2",
+              "template_id": "027ef534-d047-4e18-8496-d9fd4773e15d",
+              "location": "PlayerSocket",
+              "socket": 1
+            },
+            {
+              "instance_id": "itm_test_2_3",
+              "template_id": "004cb876-1ed2-4a4b-88d4-475cea76a03d",
+              "location": "PlayerSocket",
+              "socket": 2
+            }
+          ],
+          "opponent_items": [
+            {
+              "instance_id": "itm_opp_2_1",
+              "template_id": "00e3a7ff-af5e-47ce-a2c0-2d4ec31ac7d7",
+              "location": "OpponentSocket",
+              "socket": 0
+            }
+          ],
+          "screenshot": "D:\\Projects\\Reborn\\tests\\assets\\Jules1.png"
+        },
+        {
+          "day": 3,
+          "start_time": "2024-01-15 14:33:00",
+          "victory": true,
+          "player_items": [
+            {
+              "instance_id": "itm_test_3_1",
+              "template_id": "027ef534-d047-4e18-8496-d9fd4773e15d",
+              "location": "PlayerSocket",
+              "socket": 0
+            },
+            {
+              "instance_id": "itm_test_3_2",
+              "template_id": "004cb876-1ed2-4a4b-88d4-475cea76a03d",
+              "location": "PlayerSocket",
+              "socket": 1
+            },
+            {
+              "instance_id": "itm_test_3_3",
+              "template_id": "00e3a7ff-af5e-47ce-a2c0-2d4ec31ac7d7",
+              "location": "PlayerSocket",
+              "socket": 2
+            }
+          ],
+          "opponent_items": [
+            {
+              "instance_id": "itm_opp_3_1",
+              "template_id": "014d9c98-e823-443c-98a3-6367ab81c956",
+              "location": "OpponentSocket",
+              "socket": 0
+            }
+          ],
+          "screenshot": "D:\\Projects\\Reborn\\tests\\assets\\Jules1.png"
+        },
+        {
+          "day": 4,
+          "start_time": "2024-01-15 14:34:00",
+          "victory": false,
+          "player_items": [
+            {
+              "instance_id": "itm_test_4_1",
+              "template_id": "004cb876-1ed2-4a4b-88d4-475cea76a03d",
+              "location": "PlayerSocket",
+              "socket": 0
+            },
+            {
+              "instance_id": "itm_test_4_2",
+              "template_id": "00e3a7ff-af5e-47ce-a2c0-2d4ec31ac7d7",
+              "location": "PlayerSocket",
+              "socket": 1
+            },
+            {
+              "instance_id": "itm_test_4_3",
+              "template_id": "014d9c98-e823-443c-98a3-6367ab81c956",
+              "location": "PlayerSocket",
+              "socket": 2
+            }
+          ],
+          "opponent_items": [
+            {
+              "instance_id": "itm_opp_4_1",
+              "template_id": "01f6e150-ba23-429c-a43b-2508f63fc798",
+              "location": "OpponentSocket",
+              "socket": 0
+            }
+          ],
+          "screenshot": "D:\\Projects\\Reborn\\tests\\assets\\Jules1.png"
+        },
+        {
+          "day": 5,
+          "start_time": "2024-01-15 14:35:00",
+          "victory": true,
+          "player_items": [
+            {
+              "instance_id": "itm_test_5_1",
+              "template_id": "00e3a7ff-af5e-47ce-a2c0-2d4ec31ac7d7",
+              "location": "PlayerSocket",
+              "socket": 0
+            },
+            {
+              "instance_id": "itm_test_5_2",
+              "template_id": "014d9c98-e823-443c-98a3-6367ab81c956",
+              "location": "PlayerSocket",
+              "socket": 1
+            },
+            {
+              "instance_id": "itm_test_5_3",
+              "template_id": "01f6e150-ba23-429c-a43b-2508f63fc798",
+              "location": "PlayerSocket",
+              "socket": 2
+            }
+          ],
+          "opponent_items": [
+            {
+              "instance_id": "itm_opp_5_1",
+              "template_id": "020a0ec0-21e6-41af-899f-063573ba9ca5",
+              "location": "OpponentSocket",
+              "socket": 0
+            }
+          ],
+          "screenshot": "D:\\Projects\\Reborn\\tests\\assets\\Jules1.png"
+        },
+        {
+          "day": 6,
+          "start_time": "2024-01-15 14:36:00",
+          "victory": false,
+          "player_items": [
+            {
+              "instance_id": "itm_test_6_1",
+              "template_id": "014d9c98-e823-443c-98a3-6367ab81c956",
+              "location": "PlayerSocket",
+              "socket": 0
+            },
+            {
+              "instance_id": "itm_test_6_2",
+              "template_id": "01f6e150-ba23-429c-a43b-2508f63fc798",
+              "location": "PlayerSocket",
+              "socket": 1
+            },
+            {
+              "instance_id": "itm_test_6_3",
+              "template_id": "020a0ec0-21e6-41af-899f-063573ba9ca5",
+              "location": "PlayerSocket",
+              "socket": 2
+            }
+          ],
+          "opponent_items": [
+            {
+              "instance_id": "itm_opp_6_1",
+              "template_id": "012658f4-b289-4f10-917c-a9a1f3f9ca03",
+              "location": "OpponentSocket",
+              "socket": 0
+            }
+          ],
+          "screenshot": "D:\\Projects\\Reborn\\tests\\assets\\Jules1.png"
+        },
+        {
+          "day": 7,
+          "start_time": "2024-01-15 14:37:00",
+          "victory": true,
+          "player_items": [
+            {
+              "instance_id": "itm_test_7_1",
+              "template_id": "01f6e150-ba23-429c-a43b-2508f63fc798",
+              "location": "PlayerSocket",
+              "socket": 0
+            },
+            {
+              "instance_id": "itm_test_7_2",
+              "template_id": "020a0ec0-21e6-41af-899f-063573ba9ca5",
+              "location": "PlayerSocket",
+              "socket": 1
+            },
+            {
+              "instance_id": "itm_test_7_3",
+              "template_id": "012658f4-b289-4f10-917c-a9a1f3f9ca03",
+              "location": "PlayerSocket",
+              "socket": 2
+            }
+          ],
+          "opponent_items": [
+            {
+              "instance_id": "itm_opp_7_1",
+              "template_id": "0229faa7-2eec-4746-9134-ade4f3aebe45",
+              "location": "OpponentSocket",
+              "socket": 0
+            }
+          ],
+          "screenshot": "D:\\Projects\\Reborn\\tests\\assets\\Jules1.png"
+        },
+        {
+          "day": 8,
+          "start_time": "2024-01-15 14:38:00",
+          "victory": false,
+          "player_items": [
+            {
+              "instance_id": "itm_test_8_1",
+              "template_id": "020a0ec0-21e6-41af-899f-063573ba9ca5",
+              "location": "PlayerSocket",
+              "socket": 0
+            },
+            {
+              "instance_id": "itm_test_8_2",
+              "template_id": "012658f4-b289-4f10-917c-a9a1f3f9ca03",
+              "location": "PlayerSocket",
+              "socket": 1
+            },
+            {
+              "instance_id": "itm_test_8_3",
+              "template_id": "0229faa7-2eec-4746-9134-ade4f3aebe45",
+              "location": "PlayerSocket",
+              "socket": 2
+            }
+          ],
+          "opponent_items": [
+            {
+              "instance_id": "itm_opp_8_1",
+              "template_id": "027ef534-d047-4e18-8496-d9fd4773e15d",
+              "location": "OpponentSocket",
+              "socket": 0
+            }
+          ],
+          "screenshot": "D:\\Projects\\Reborn\\tests\\assets\\Jules1.png"
+        },
+        {
+          "day": 9,
+          "start_time": "2024-01-15 14:39:00",
+          "victory": true,
+          "player_items": [
+            {
+              "instance_id": "itm_test_9_1",
+              "template_id": "012658f4-b289-4f10-917c-a9a1f3f9ca03",
+              "location": "PlayerSocket",
+              "socket": 0
+            },
+            {
+              "instance_id": "itm_test_9_2",
+              "template_id": "0229faa7-2eec-4746-9134-ade4f3aebe45",
+              "location": "PlayerSocket",
+              "socket": 1
+            },
+            {
+              "instance_id": "itm_test_9_3",
+              "template_id": "027ef534-d047-4e18-8496-d9fd4773e15d",
+              "location": "PlayerSocket",
+              "socket": 2
+            }
+          ],
+          "opponent_items": [
+            {
+              "instance_id": "itm_opp_9_1",
+              "template_id": "004cb876-1ed2-4a4b-88d4-475cea76a03d",
+              "location": "OpponentSocket",
+              "socket": 0
+            }
+          ],
+          "screenshot": "D:\\Projects\\Reborn\\tests\\assets\\Jules1.png"
+        },
+        {
+          "day": 10,
+          "start_time": "2024-01-15 14:40:00",
+          "victory": false,
+          "player_items": [
+            {
+              "instance_id": "itm_test_10_1",
+              "template_id": "0229faa7-2eec-4746-9134-ade4f3aebe45",
+              "location": "PlayerSocket",
+              "socket": 0
+            },
+            {
+              "instance_id": "itm_test_10_2",
+              "template_id": "027ef534-d047-4e18-8496-d9fd4773e15d",
+              "location": "PlayerSocket",
+              "socket": 1
+            },
+            {
+              "instance_id": "itm_test_10_3",
+              "template_id": "004cb876-1ed2-4a4b-88d4-475cea76a03d",
+              "location": "PlayerSocket",
+              "socket": 2
+            }
+          ],
+          "opponent_items": [
+            {
+              "instance_id": "itm_opp_10_1",
+              "template_id": "00e3a7ff-af5e-47ce-a2c0-2d4ec31ac7d7",
+              "location": "OpponentSocket",
+              "socket": 0
+            }
+          ],
+          "screenshot": "D:\\Projects\\Reborn\\tests\\assets\\Jules1.png"
+        },
+        {
+          "day": 11,
+          "start_time": "2024-01-15 14:41:00",
+          "victory": true,
+          "player_items": [
+            {
+              "instance_id": "itm_test_11_1",
+              "template_id": "027ef534-d047-4e18-8496-d9fd4773e15d",
+              "location": "PlayerSocket",
+              "socket": 0
+            },
+            {
+              "instance_id": "itm_test_11_2",
+              "template_id": "004cb876-1ed2-4a4b-88d4-475cea76a03d",
+              "location": "PlayerSocket",
+              "socket": 1
+            },
+            {
+              "instance_id": "itm_test_11_3",
+              "template_id": "00e3a7ff-af5e-47ce-a2c0-2d4ec31ac7d7",
+              "location": "PlayerSocket",
+              "socket": 2
+            }
+          ],
+          "opponent_items": [
+            {
+              "instance_id": "itm_opp_11_1",
+              "template_id": "014d9c98-e823-443c-98a3-6367ab81c956",
+              "location": "OpponentSocket",
+              "socket": 0
+            }
+          ],
+          "screenshot": "D:\\Projects\\Reborn\\tests\\assets\\Jules1.png"
+        },
+        {
+          "day": 12,
+          "start_time": "2024-01-15 14:42:00",
+          "victory": false,
+          "player_items": [
+            {
+              "instance_id": "itm_test_12_1",
+              "template_id": "004cb876-1ed2-4a4b-88d4-475cea76a03d",
+              "location": "PlayerSocket",
+              "socket": 0
+            },
+            {
+              "instance_id": "itm_test_12_2",
+              "template_id": "00e3a7ff-af5e-47ce-a2c0-2d4ec31ac7d7",
+              "location": "PlayerSocket",
+              "socket": 1
+            },
+            {
+              "instance_id": "itm_test_12_3",
+              "template_id": "014d9c98-e823-443c-98a3-6367ab81c956",
+              "location": "PlayerSocket",
+              "socket": 2
+            }
+          ],
+          "opponent_items": [
+            {
+              "instance_id": "itm_opp_12_1",
+              "template_id": "01f6e150-ba23-429c-a43b-2508f63fc798",
+              "location": "OpponentSocket",
+              "socket": 0
+            }
+          ],
+          "screenshot": "D:\\Projects\\Reborn\\tests\\assets\\Jules1.png"
+        },
+        {
+          "day": 13,
+          "start_time": "2024-01-15 14:43:00",
+          "victory": true,
+          "player_items": [
+            {
+              "instance_id": "itm_test_13_1",
+              "template_id": "00e3a7ff-af5e-47ce-a2c0-2d4ec31ac7d7",
+              "location": "PlayerSocket",
+              "socket": 0
+            },
+            {
+              "instance_id": "itm_test_13_2",
+              "template_id": "014d9c98-e823-443c-98a3-6367ab81c956",
+              "location": "PlayerSocket",
+              "socket": 1
+            },
+            {
+              "instance_id": "itm_test_13_3",
+              "template_id": "01f6e150-ba23-429c-a43b-2508f63fc798",
+              "location": "PlayerSocket",
+              "socket": 2
+            }
+          ],
+          "opponent_items": [
+            {
+              "instance_id": "itm_opp_13_1",
+              "template_id": "020a0ec0-21e6-41af-899f-063573ba9ca5",
+              "location": "OpponentSocket",
+              "socket": 0
+            }
+          ],
+          "screenshot": "D:\\Projects\\Reborn\\tests\\assets\\Jules1.png"
+        }
+      ]
+    }
+  ]
+}

@@ -24,21 +24,39 @@ class ItemDetailCard(QFrame):
     
     tier_changed = Signal(str)  # 当前等级改变信号
     
-    def __init__(self, item_id: str, item_type: str = "skill", 
-                 current_tier: str = "bronze", parent=None):
+    def __init__(self, item_id: str = None, item_type: str = "skill", 
+                 current_tier: str = "bronze", parent=None, default_expanded: bool = False,
+                 enable_tier_click: bool = False, content_scale: float = 1.0, item_data: Dict = None):
         super().__init__(parent)
         self.item_id = item_id
         self.item_type = item_type
         self.current_tier = current_tier.lower()
         self.i18n = get_i18n()
+        self.content_scale = content_scale  # ✅ 内容缩放比例
+        # 初始展开状态（可由调用方覆盖）
         self.is_expanded = False
+        self._default_expanded = bool(default_expanded)
+        self.show_all_tiers = False  # 是否显示所有等级
+        self.enable_tier_click = enable_tier_click  # 是否允许点击详情区域切换等级
         
-        # 加载数据
-        self.item_data = self._load_item_data()
+        # 加载数据（如果提供了item_data则直接使用，否则从数据库加载）
+        if item_data:
+            self.item_data = item_data
+            if not self.item_id and item_data.get("id"):
+                self.item_id = item_data["id"]
+        else:
+            self.item_data = self._load_item_data()
+        
         if not self.item_data:
             return
         
         self._init_ui()
+        # 如果被要求默认展开，触发展开行为（safe）
+        try:
+            if self._default_expanded and not self.is_expanded:
+                self.toggle_expand()
+        except Exception:
+            pass
     
     def _load_item_data(self) -> Dict:
         """从数据库加载物品数据"""
@@ -54,6 +72,11 @@ class ItemDetailCard(QFrame):
         except Exception as e:
             print(f"Error loading {self.item_type} data: {e}")
         return {}
+    
+    def _get_enchantment_data(self) -> Dict:
+        """获取当前物品的附魔数据"""
+        # ✅ 直接从当前物品数据中获取附魔定义
+        return self.item_data.get("enchantments", {})
     
     def _init_ui(self):
         """初始化UI - 完全参考 App.tsx 的结构"""
@@ -84,12 +107,15 @@ class ItemDetailCard(QFrame):
         header.setCursor(Qt.CursorShape.PointingHandCursor)
         header.mousePressEvent = lambda e: self.toggle_expand()
         
-        layout = QHBoxLayout(header)
-        layout.setContentsMargins(12, 8, 12, 8)
-        layout.setSpacing(12)
+        # ✅ 应用缩放比例
+        scale = self.content_scale
         
-        # 左侧：图标
-        icon_size = 50
+        layout = QHBoxLayout(header)
+        layout.setContentsMargins(int(10 * scale), int(6 * scale), int(10 * scale), int(6 * scale))
+        layout.setSpacing(int(10 * scale))
+        
+        # 左侧：图标（缩小一点）
+        icon_size = int(42 * scale)  # 应用缩放
         size_class = self._get_size_class()
         
         icon_container = QFrame()
@@ -113,20 +139,34 @@ class ItemDetailCard(QFrame):
         
         # 中间：名称和标签
         center_layout = QVBoxLayout()
-        center_layout.setSpacing(4)
+        center_layout.setSpacing(int(2 * scale))  # 应用缩放
         
         # 名称行
         name_layout = QHBoxLayout()
-        name_layout.setSpacing(8)
+        name_layout.setSpacing(int(6 * scale))  # 应用缩放
         
         lang = self.i18n.get_language()
         name = self.item_data.get("name_cn" if lang != "en_US" else "name_en", "Unknown")
         if lang == "zh_TW":
             name = self.i18n.to_traditional(name)
         
+        # ✅ 如果有附魔，添加附魔名称前缀
+        enchantment_key = self.item_data.get("enchantment", "")
+        if enchantment_key:
+            enchantments_db = self._get_enchantment_data()
+            if enchantment_key in enchantments_db:
+                enchant_data = enchantments_db[enchantment_key]
+                enchant_name = enchant_data.get("name_cn", enchantment_key)
+                if lang == "zh_TW":
+                    enchant_name = self.i18n.to_traditional(enchant_name)
+                elif lang == "en_US":
+                    enchant_name = enchantment_key  # 英文直接用key
+                name = f"{enchant_name} {name}"
+        
         name_label = QLabel(name)
         name_label.setObjectName("NameCn")
-        name_label.setStyleSheet("color: #fff; font-size: 17pt; font-weight: bold;")
+        # ✅ 应用缩放到字体
+        name_label.setStyleSheet(f"color: #fff; font-size: {int(11 * scale)}pt; font-weight: 700;")
         name_layout.addWidget(name_label)
         
         # 等级标签（根据 available_tiers 或 starting_tier）
@@ -134,36 +174,60 @@ class ItemDetailCard(QFrame):
         tier_label = QLabel(tier_display)
         tier_label.setObjectName("TierLabel")
         tier_label.setProperty("tier_class", self.current_tier)
+        tier_label.setFixedHeight(int(18 * scale))  # ✅ 固定高度，不随内容变化
         name_layout.addWidget(tier_label)
         name_layout.addStretch()
         
         center_layout.addLayout(name_layout)
         
-        # 标签行（显示前3个processed_tags或tags）
-        tags_layout = QHBoxLayout()
-        tags_layout.setSpacing(4)
-        tags = self.item_data.get("tags", "").split(" / ")[:3]
-        for tag in tags:
-            if tag.strip():
-                tag_badge = QLabel(tag.strip())
-                tag_badge.setObjectName("TagBadge")
-                tag_badge.setStyleSheet("""
-                    color: #98a8fe;
-                    background: rgba(152, 168, 254, 0.15);
-                    padding: 0 6px;
-                    border-radius: 10px;
-                    border: 1px solid rgba(152, 168, 254, 0.3);
-                    font-size: 12pt;
-                """)
-                tags_layout.addWidget(tag_badge)
+        # 标签行（解析 "英文 / 中文 | 英文 / 中文" 格式）
+        # ✅ 创建固定高度的标签容器
+        tags_container = QWidget()
+        tags_container.setFixedHeight(int(20 * scale))  # 固定高度，不随内容变化
+        
+        tags_layout = QHBoxLayout(tags_container)
+        tags_layout.setContentsMargins(0, 0, 0, 0)
+        tags_layout.setSpacing(int(4 * scale))
+        
+        # 解析tags字符串
+        tags_str = self.item_data.get("tags", "")
+        tag_pairs = []
+        if tags_str:
+            # 按 | 分割成多个tag对
+            for tag_pair in tags_str.split("|"):
+                tag_pair = tag_pair.strip()
+                if "/" in tag_pair:
+                    # 分割英文和中文
+                    parts = tag_pair.split("/")
+                    if len(parts) >= 2:
+                        en_tag = parts[0].strip()
+                        cn_tag = parts[1].strip()
+                        tag_pairs.append((en_tag, cn_tag))
+        
+        # 显示前3个tag（增加到3个）
+        for en_tag, cn_tag in tag_pairs[:3]:
+            # 根据语言选择显示
+            if lang == "en_US":
+                display_tag = en_tag
+            elif lang == "zh_TW":
+                display_tag = self.i18n.to_traditional(cn_tag)
+            else:
+                display_tag = cn_tag
+            
+            tag_badge = QLabel(display_tag)
+            tag_badge.setObjectName("TagBadge")
+            # ✅ 移除内联样式，使用样式表中的定义
+            tags_layout.addWidget(tag_badge)
         tags_layout.addStretch()
-        center_layout.addLayout(tags_layout)
+        
+        center_layout.addWidget(tags_container)  # ✅ 添加容器而不是布局
         
         layout.addLayout(center_layout, 1)
         
         # 右侧：展开箭头
         self.expand_chevron = QLabel("▾")
-        self.expand_chevron.setStyleSheet("color: rgba(255, 255, 255, 0.2); font-size: 16pt;")
+        # ✅ 应用缩放到箭头字体
+        self.expand_chevron.setStyleSheet(f"color: rgba(255, 255, 255, 0.35); font-size: {int(12 * scale)}pt; padding-right: {int(4 * scale)}px;")
         layout.addWidget(self.expand_chevron)
         
         return header
@@ -173,71 +237,52 @@ class ItemDetailCard(QFrame):
         details = QFrame()
         details.setObjectName("ItemDetailsV2")
         
-        layout = QVBoxLayout(details)
-        layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(12)
+        # ✅ 应用缩放比例
+        scale = self.content_scale
         
-        # 等级切换按钮组
-        self._add_tier_buttons(layout)
+        layout = QVBoxLayout(details)
+        layout.setContentsMargins(int(12 * scale), int(12 * scale), int(12 * scale), int(12 * scale))
+        layout.setSpacing(int(10 * scale))
         
         # 技能描述区域
         self.description_container = QFrame()
         desc_layout = QVBoxLayout(self.description_container)
         desc_layout.setContentsMargins(0, 0, 0, 0)
-        desc_layout.setSpacing(8)
+        desc_layout.setSpacing(int(6 * scale))
         
         self._update_descriptions(desc_layout)
         
         layout.addWidget(self.description_container)
+        # 不添加底部弹性空间，让内容紧凑
         
         return details
     
-    def _add_tier_buttons(self, parent_layout: QVBoxLayout):
-        """添加等级切换按钮"""
+    def _toggle_tier_display(self):
+        """切换等级显示模式"""
+        # 检查是否有多个等级
         available_tiers = self.item_data.get("available_tiers", "Bronze")
         tiers = [t.strip().lower() for t in available_tiers.replace("/", ",").split(",") if t.strip()]
         
         if len(tiers) <= 1:
-            return  # 只有一个等级，不显示切换按钮
+            return  # 只有一个等级，不切换
         
-        tier_label = QLabel("等级:")
-        tier_label.setStyleSheet("color: #f59e0b; font-size: 11pt; font-weight: bold;")
-        parent_layout.addWidget(tier_label)
+        if not hasattr(self, 'available_tiers'):
+            self.available_tiers = tiers
         
-        button_layout = QHBoxLayout()
-        button_layout.setSpacing(8)
+        # 切换显示模式
+        self.show_all_tiers = not self.show_all_tiers
+        self._update_descriptions(self.description_container.layout())
         
-        self.tier_button_group = QButtonGroup(self)
-        tier_names = {
-            "bronze": "青铜",
-            "silver": "白银",
-            "gold": "黄金",
-            "diamond": "钻石"
-        }
-        
-        lang = self.i18n.get_language()
-        if lang == "en_US":
-            tier_names = {k: k.title() for k in tier_names}
-        elif lang == "zh_TW":
-            tier_names = {k: self.i18n.to_traditional(v) for k, v in tier_names.items()}
-        
-        for tier in ["bronze", "silver", "gold", "diamond"]:
-            if tier in tiers:
-                btn = QPushButton(tier_names.get(tier, tier.title()))
-                btn.setCheckable(True)
-                btn.setChecked(tier == self.current_tier)
-                btn.setProperty("tier", tier)
-                btn.setFixedHeight(30)
-                btn.setStyleSheet(self._get_tier_button_style())
-                btn.clicked.connect(lambda checked, t=tier: self._on_tier_changed(t))
-                button_layout.addWidget(btn)
-                self.tier_button_group.addButton(btn)
-        
-        button_layout.addStretch()
-        parent_layout.addLayout(button_layout)
+        # 如果是弹窗窗口，更新内容后重新提升到最上层
+        if self.windowFlags() & Qt.Tool:
+            try:
+                self.raise_()
+                self.activateWindow()
+            except Exception:
+                pass
     
     def _update_descriptions(self, parent_layout: QVBoxLayout):
-        """更新描述文本"""
+        """更新描述文本 - 根据类型显示 descriptions 或 skills/skills_passive"""
         # 清空旧内容
         while parent_layout.count():
             item = parent_layout.takeAt(0)
@@ -245,25 +290,172 @@ class ItemDetailCard(QFrame):
                 item.widget().deleteLater()
         
         lang = self.i18n.get_language()
-        descriptions = self.item_data.get("descriptions", [])
         
-        for desc_obj in descriptions:
-            desc_text = desc_obj.get("cn" if lang != "en_US" else "en", "")
-            if lang == "zh_TW":
-                desc_text = self.i18n.to_traditional(desc_text)
+        # ✅ 应用缩放比例到字体和边距
+        scale = self.content_scale
+        
+        # 优先显示 descriptions（技能数据）
+        descriptions = self.item_data.get("descriptions", [])
+        if descriptions:
+            for desc_obj in descriptions:
+                desc_text = desc_obj.get("cn" if lang != "en_US" else "en", "")
+                if lang == "zh_TW":
+                    desc_text = self.i18n.to_traditional(desc_text)
+                
+                if desc_text:
+                    # 处理等级数值显示
+                    desc_text = self._process_tier_values(desc_text)
+                    
+                    desc_label = QLabel(f"⚡ {desc_text}")
+                    desc_label.setWordWrap(True)
+                    desc_label.setStyleSheet(f"""
+                        color: #ffd666;
+                        font-size: {int(9 * scale)}pt;
+                        line-height: 1.4;
+                        background: rgba(255, 214, 102, 0.08);
+                        border: 1px solid rgba(255, 214, 102, 0.15);
+                        border-radius: {int(6 * scale)}px;
+                        padding: {int(8 * scale)}px {int(10 * scale)}px;
+                    """)
+                    
+                    # 如果启用了等级点击切换，为每个描述框添加点击事件
+                    if self.enable_tier_click:
+                        desc_label.setCursor(Qt.CursorShape.PointingHandCursor)
+                        # 使用默认参数捕获当前 label，避免闭包问题
+                        desc_label.mousePressEvent = lambda event, lbl=desc_label: self._toggle_tier_display()
+                    
+                    parent_layout.addWidget(desc_label)
+            return
+        
+        # 如果没有 descriptions，则显示 skills 和 skills_passive（物品数据）
+        # 1. 显示主动技能 (skills)
+        skills = self.item_data.get("skills", [])
+        if skills:
+            for skill_obj in skills:
+                skill_text = skill_obj.get("cn" if lang != "en_US" else "en", "")
+                if lang == "zh_TW":
+                    skill_text = self.i18n.to_traditional(skill_text)
+                
+                if skill_text:
+                    # 处理等级数值显示
+                    skill_text = self._process_tier_values(skill_text)
+                    
+                    skill_label = QLabel(f"⚡ {skill_text}")
+                    skill_label.setWordWrap(True)
+                    skill_label.setStyleSheet(f"""
+                        color: #ffd666;
+                        font-size: {int(9 * scale)}pt;
+                        line-height: 1.4;
+                        background: rgba(255, 214, 102, 0.08);
+                        border: 1px solid rgba(255, 214, 102, 0.15);
+                        border-radius: {int(6 * scale)}px;
+                        padding: {int(8 * scale)}px {int(10 * scale)}px;
+                    """)
+                    
+                    # 如果启用了等级点击切换，为每个技能框添加点击事件
+                    if self.enable_tier_click:
+                        skill_label.setCursor(Qt.CursorShape.PointingHandCursor)
+                        # 使用默认参数捕获当前 label，避免闭包问题
+                        skill_label.mousePressEvent = lambda event, lbl=skill_label: self._toggle_tier_display()
+                    
+                    parent_layout.addWidget(skill_label)
+        
+        # 2. 显示被动技能 (skills_passive)
+        skills_passive = self.item_data.get("skills_passive", [])
+        if skills_passive:
+            for passive_obj in skills_passive:
+                passive_text = passive_obj.get("cn" if lang != "en_US" else "en", "")
+                if lang == "zh_TW":
+                    passive_text = self.i18n.to_traditional(passive_text)
+                
+                if passive_text:
+                    # 处理等级数值显示
+                    passive_text = self._process_tier_values(passive_text)
+                    
+                    passive_label = QLabel(f"🛡 {passive_text}")
+                    passive_label.setWordWrap(True)
+                    passive_label.setStyleSheet(f"""
+                        color: #95de64;
+                        font-size: {int(9 * scale)}pt;
+                        line-height: 1.4;
+                        background: rgba(149, 222, 100, 0.08);
+                        border: 1px solid rgba(149, 222, 100, 0.15);
+                        border-radius: {int(6 * scale)}px;
+                        padding: {int(8 * scale)}px {int(10 * scale)}px;
+                    """)
+                    
+                    # 如果启用了等级点击切换，为每个被动技能框添加点击事件
+                    if self.enable_tier_click:
+                        passive_label.setCursor(Qt.CursorShape.PointingHandCursor)
+                        # 使用默认参数捕获当前 label，避免闭包问题
+                        passive_label.mousePressEvent = lambda event, lbl=passive_label: self._toggle_tier_display()
+                    
+                    parent_layout.addWidget(passive_label)
+        
+        # 3. ✅ 显示附魔效果 (enchantment)
+        enchantment_key = self.item_data.get("enchantment", "")
+        if enchantment_key:
+            enchantments_db = self._get_enchantment_data()
+            if enchantment_key in enchantments_db:
+                enchant_data = enchantments_db[enchantment_key]
+                enchant_effect = enchant_data.get("effect_cn" if lang != "en_US" else "effect_en", "")
+                if lang == "zh_TW":
+                    enchant_effect = self.i18n.to_traditional(enchant_effect)
+                
+                if enchant_effect:
+                    enchant_label = QLabel(f"✨ {enchant_effect}")
+                    enchant_label.setWordWrap(True)
+                    enchant_label.setStyleSheet(f"""
+                        color: #d4b106;
+                        font-size: {int(9 * scale)}pt;
+                        line-height: 1.4;
+                        background: rgba(212, 177, 6, 0.08);
+                        border: 1px solid rgba(212, 177, 6, 0.15);
+                        border-radius: {int(6 * scale)}px;
+                        padding: {int(8 * scale)}px {int(10 * scale)}px;
+                    """)
+                    
+                    # 如果启用了等级点击切换，为附魔框也添加点击事件
+                    if self.enable_tier_click:
+                        enchant_label.setCursor(Qt.CursorShape.PointingHandCursor)
+                        enchant_label.mousePressEvent = lambda event, lbl=enchant_label: self._toggle_tier_display()
+                    
+                    parent_layout.addWidget(enchant_label)
+    
+    def _process_tier_values(self, text: str) -> str:
+        """
+        处理文本中的等级数值显示
+        例如：将 "4/6" 根据当前等级和显示模式进行过滤
+        """
+        import re
+        
+        # 查找所有类似 "数字/数字/数字" 的模式
+        def replace_values(match):
+            values_str = match.group(0)
+            values = values_str.split('/')
             
-            if desc_text:
-                desc_label = QLabel(f"• {desc_text}")
-                desc_label.setWordWrap(True)
-                desc_label.setStyleSheet("""
-                    color: #e0e0e0;
-                    font-size: 11pt;
-                    background: rgba(30, 30, 35, 0.6);
-                    border: 1px solid rgba(245, 158, 11, 0.2);
-                    border-radius: 6px;
-                    padding: 12px;
-                """)
-                parent_layout.addWidget(desc_label)
+            if self.show_all_tiers:
+                # 显示所有等级：保持原样
+                return values_str
+            else:
+                # 只显示当前等级对应的数值
+                if not hasattr(self, 'available_tiers') or not self.available_tiers:
+                    return values[0] if values else values_str
+                
+                # 找到当前等级在可用等级列表中的索引
+                try:
+                    tier_index = self.available_tiers.index(self.current_tier)
+                    if tier_index < len(values):
+                        return values[tier_index]
+                except (ValueError, IndexError):
+                    pass
+                
+                # 默认返回第一个值
+                return values[0] if values else values_str
+        
+        # 匹配数字/数字模式（可能有多组）
+        result = re.sub(r'\d+(?:/\d+)+', replace_values, text)
+        return result
     
     def _on_tier_changed(self, tier: str):
         """等级切换"""
@@ -332,74 +524,74 @@ class ItemDetailCard(QFrame):
         return tier_names.get(self.current_tier, "青铜+")
     
     def _get_tier_button_style(self) -> str:
-        """获取等级按钮样式"""
-        return """
-            QPushButton {
-                background: rgba(60, 60, 65, 0.8);
-                color: #ccc;
-                border: 1px solid rgba(245, 158, 11, 0.2);
-                border-radius: 6px;
-                font-size: 10pt;
-                padding: 5px 12px;
-            }
-            QPushButton:hover {
-                background: rgba(70, 70, 75, 0.9);
-                border: 1px solid rgba(245, 158, 11, 0.4);
-            }
-            QPushButton:checked {
-                background: rgba(245, 158, 11, 0.3);
-                border: 1px solid rgba(245, 158, 11, 0.6);
-                color: #f59e0b;
-                font-weight: bold;
-            }
-        """
+        """获取等级按钮样式（已废弃，由 _update_tier_button_text 处理）"""
+        return ""
     
     def _setup_style(self):
-        """设置样式 - 完全参考 App.css"""
-        self.setStyleSheet("""
-            #ItemDetailCard {
+        """设置样式 - 完全参考 App.css，根据等级设置边框颜色"""
+        # 等级颜色
+        tier_colors = {
+            "bronze": "#CD7F32",
+            "silver": "#C0C0C0",
+            "gold": "#FFD700",
+            "diamond": "#B9F2FF"
+        }
+        
+        border_color = tier_colors.get(self.current_tier, "#CD7F32")
+        
+        self.setStyleSheet(f"""
+            #ItemDetailCard {{
                 margin-bottom: 8px;
-                background: rgba(30, 30, 30, 0.4);
+                background: rgba(20, 20, 22, 0.45);
                 border-radius: 8px;
-                border: 1px solid rgba(255, 255, 255, 0.05);
-            }
-            #ItemDetailCard:hover {
-                background: rgba(50, 50, 50, 0.5);
-                border-color: rgba(255, 255, 255, 0.15);
-            }
-            #ItemDetailCard[class="item-card-container expanded"] {
-                background: rgba(25, 25, 25, 0.9);
-                border-color: rgba(255, 205, 25, 0.3);
-            }
-            #ItemCardHeader {
-                background: rgba(50, 45, 40, 0.6);
-                border: 1px solid rgba(255, 255, 255, 0.1);
+                border: 1px solid {border_color};
+            }}
+            #ItemDetailCard:hover {{
+                background: rgba(30, 30, 32, 0.55);
+                border-color: {border_color};
+            }}
+            #ItemDetailCard[class="item-card-container expanded"] {{
+                background: rgba(12, 12, 14, 0.95);
+                border-color: {border_color};
+            }}
+            #ItemCardHeader {{
+                background: rgba(30, 30, 32, 0.6);
+                border: 1px solid rgba(255, 255, 255, 0.04);
                 border-radius: 8px;
-            }
-            #ItemCardHeader:hover {
-                background: rgba(70, 60, 40, 0.7);
-            }
-            #ImageBox {
-                background: rgba(0, 0, 0, 0.4);
+            }}
+            #ItemCardHeader:hover {{
+                background: rgba(40, 40, 44, 0.68);
+            }}
+            #ImageBox {{
+                background: rgba(0, 0, 0, 0.35);
                 border-radius: 6px;
-                border: 1px solid rgba(255, 255, 255, 0.1);
-            }
-            #TierLabel {
-                font-size: 11pt;
+                border: 1px solid rgba(255, 255, 255, 0.06);
+            }}
+            #TierLabel {{
+                font-size: 9pt;
                 font-weight: 800;
                 padding: 1px 4px;
                 border-radius: 3px;
                 background: rgba(255, 255, 255, 0.08);
                 color: rgba(255, 255, 255, 0.5);
-            }
-            #TierLabel[tier_class="bronze"] { color: #cd7f32; border: 1px solid rgba(205, 127, 50, 0.3); }
-            #TierLabel[tier_class="silver"] { color: #c0c0c0; border: 1px solid rgba(192, 192, 192, 0.3); }
-            #TierLabel[tier_class="gold"] { color: #ffd700; border: 1px solid rgba(255, 215, 0, 0.3); }
-            #TierLabel[tier_class="diamond"] { color: #b9f2ff; border: 1px solid rgba(185, 242, 255, 0.3); }
-            #ItemDetailsV2 {
-                border-top: 1px solid rgba(255, 255, 255, 0.05);
-                background: rgba(0, 0, 0, 0.2);
-            }
+            }}
+            #TierLabel[tier_class="bronze"] {{ color: #cd7f32; border: 1px solid rgba(205, 127, 50, 0.3); }}
+            #TierLabel[tier_class="silver"] {{ color: #c0c0c0; border: 1px solid rgba(192, 192, 192, 0.3); }}
+            #TierLabel[tier_class="gold"] {{ color: #ffd700; border: 1px solid rgba(255, 215, 0, 0.3); }}
+            #TierLabel[tier_class="diamond"] {{ color: #b9f2ff; border: 1px solid rgba(185, 242, 255, 0.3); }}
+            #ItemDetailsV2 {{
+                border-top: 1px solid rgba(255, 255, 255, 0.03);
+                background: rgba(0, 0, 0, 0.12);
+            }}
+            /* ✅ 标签样式 - 紧凑扁平设计 */
+            QLabel#TagBadge {{
+                color: #8b9cff;
+                background: rgba(122, 143, 255, 0.12);
+                padding: 2px 6px;
+                border-radius: 3px;
+                font-size: 8pt;
+                font-weight: 500;
+            }}
         """)
     
     def update_language(self):
