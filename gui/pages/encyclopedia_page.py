@@ -1032,10 +1032,12 @@ class EncyclopediaPage(QWidget):
                 else:
                     # 物品：搜索 skills, skills_passive 等所有文本字段
                     # 1. 搜索 skills 数组
-                    skills = item.get("skills", [])
+                    skills = item.get("skills") or []  # ✅ 修复：确保是列表
                     for skill in skills:
                         if isinstance(skill, dict):
-                            if keyword in skill.get("en", "").lower() or keyword in skill.get("cn", "").lower():
+                            en_text = skill.get("en") or ""  # ✅ 修复：处理 None
+                            cn_text = skill.get("cn") or ""  # ✅ 修复：处理 None
+                            if keyword in en_text.lower() or keyword in cn_text.lower():
                                 content_match = True
                                 break
                         elif isinstance(skill, str) and keyword in skill.lower():
@@ -1044,10 +1046,12 @@ class EncyclopediaPage(QWidget):
                     
                     # 2. 搜索 skills_passive 数组
                     if not content_match:
-                        skills_passive = item.get("skills_passive", [])
+                        skills_passive = item.get("skills_passive") or []  # ✅ 修复
                         for skill in skills_passive:
                             if isinstance(skill, dict):
-                                if keyword in skill.get("en", "").lower() or keyword in skill.get("cn", "").lower():
+                                en_text = skill.get("en") or ""  # ✅ 修复
+                                cn_text = skill.get("cn") or ""  # ✅ 修复
+                                if keyword in en_text.lower() or keyword in cn_text.lower():
                                     content_match = True
                                     break
                             elif isinstance(skill, str) and keyword in skill.lower():
@@ -1056,16 +1060,18 @@ class EncyclopediaPage(QWidget):
                     
                     # 3. 搜索 enchantments 数组
                     if not content_match:
-                        enchantments = item.get("enchantments", [])
+                        enchantments = item.get("enchantments") or []  # ✅ 修复
                         for ench in enchantments:
                             if isinstance(ench, dict):
-                                if keyword in ench.get("en", "").lower() or keyword in ench.get("cn", "").lower():
+                                en_text = ench.get("en") or ""  # ✅ 修复
+                                cn_text = ench.get("cn") or ""  # ✅ 修复
+                                if keyword in en_text.lower() or keyword in cn_text.lower():
                                     content_match = True
                                     break
                     
                     # 4. 搜索 quests 数组
                     if not content_match:
-                        quests = item.get("quests", [])
+                        quests = item.get("quests") or []  # ✅ 修复：确保 quests 是列表而非 None
                         for quest in quests:
                             if isinstance(quest, dict):
                                 target_en = quest.get("en_target", "")

@@ -9,9 +9,10 @@ from pathlib import Path
 
 class GameSession:
     """单次游戏会话"""
-    def __init__(self, start_time: str, start_line: int):
-        self.start_time = start_time
+    def __init__(self, start_time: str, start_line: int, log_file_date: str = None):
+        self.start_time = start_time  # 时间戳，格式: HH:MM:SS.mmm
         self.start_line = start_line
+        self.log_file_date = log_file_date  # 日志文件日期，格式: YYYY-MM-DD
         self.end_time: Optional[str] = None
         self.end_line: Optional[int] = None
         self.days = 1  # 游戏从第1天开始
@@ -22,6 +23,34 @@ class GameSession:
         self.items: Dict[str, Dict] = {}
         # PVP战斗记录
         self.pvp_battles: List[Dict] = []
+        
+        # ✅ 生成唯一ID：使用日期+时间的hash
+        self._generate_unique_id()
+    
+    def _generate_unique_id(self):
+        """生成唯一ID"""
+        import hashlib
+        # 使用日期+开始时间作为唯一标识
+        if self.log_file_date:
+            unique_str = f"{self.log_file_date}_{self.start_time}_{self.start_line}"
+        else:
+            unique_str = f"{self.start_time}_{self.start_line}"
+        
+        # 生成SHA256 hash的前16位作为ID
+        hash_obj = hashlib.sha256(unique_str.encode())
+        self.session_id = hash_obj.hexdigest()[:16]
+    
+    def get_full_start_datetime(self) -> str:
+        """获取完整的开始日期时间"""
+        if self.log_file_date:
+            return f"{self.log_file_date} {self.start_time}"
+        return self.start_time
+    
+    def get_full_end_datetime(self) -> str:
+        """获取完整的结束日期时间"""
+        if self.log_file_date and self.end_time:
+            return f"{self.log_file_date} {self.end_time}"
+        return self.end_time or ""
     
     def add_item(self, instance_id: str, template_id: str, target: str, section: str):
         """记录物品购买"""
@@ -114,6 +143,13 @@ class LogAnalyzer:
         self._pvp_player_items = []
         self._pvp_opponent_items = []
         
+        # ✅ 新增：缓存最近的几行日志，用于往回查找 "All exit tasks completed"
+        self._recent_lines = []  # 存储最近5行的内容
+        self._recent_lines_max = 5
+        
+        # ✅ 当前正在解析的日志文件日期
+        self._current_log_file_date: Optional[str] = None
+        
         # 加载物品数据库
         self.items_db = {}
         if items_db_path:
@@ -132,6 +168,81 @@ class LogAnalyzer:
         # PVP结束回调函数列表
         self.pvp_end_callbacks: List = []
     
+    def _load_cached_sessions(self) -> List[GameSession]:
+        """从缓存加载已解析的会话"""
+        cache_file = self.log_dir / "sessions_cache.json"
+        
+        if not cache_file.exists():
+            return []
+        
+        try:
+            import json
+            with open(cache_file, 'r', encoding='utf-8') as f:
+                cached_data = json.load(f)
+            
+            sessions = []
+            for session_data in cached_data:
+                # 重建 GameSession 对象
+                session = GameSession(
+                    session_data['start_time'],
+                    session_data['start_line'],
+                    session_data.get('log_file_date')
+                )
+                session.session_id = session_data['session_id']
+                session.end_time = session_data.get('end_time')
+                session.end_line = session_data.get('end_line')
+                session.days = session_data.get('days', 1)
+                session.is_finished = session_data.get('is_finished', False)
+                session.victory = session_data.get('victory', False)
+                session.hero = session_data.get('hero')
+                session.items = session_data.get('items', {})
+                session.pvp_battles = session_data.get('pvp_battles', [])
+                
+                sessions.append(session)
+            
+            print(f"[LogAnalyzer] 从缓存加载了 {len(sessions)} 个会话")
+            return sessions
+        except Exception as e:
+            print(f"[LogAnalyzer] 加载缓存失败: {e}")
+            return []
+    
+    def _save_sessions_cache(self):
+        """保存会话到缓存"""
+        cache_file = self.log_dir / "sessions_cache.json"
+        
+        try:
+            import json
+            cached_data = []
+            
+            for session in self.sessions:
+                session_data = {
+                    'session_id': session.session_id,
+                    'start_time': session.start_time,
+                    'start_line': session.start_line,
+                    'log_file_date': session.log_file_date,
+                    'end_time': session.end_time,
+                    'end_line': session.end_line,
+                    'days': session.days,
+                    'is_finished': session.is_finished,
+                    'victory': session.victory,
+                    'hero': session.hero,
+                    'items': session.items,
+                    'pvp_battles': session.pvp_battles
+                }
+                cached_data.append(session_data)
+            
+            with open(cache_file, 'w', encoding='utf-8') as f:
+                json.dump(cached_data, f, indent=2, ensure_ascii=False)
+            
+            print(f"[LogAnalyzer] 已保存 {len(cached_data)} 个会话到缓存")
+        except Exception as e:
+            print(f"[LogAnalyzer] 保存缓存失败: {e}")
+    
+    def _get_cached_session_ids(self) -> set:
+        """获取所有已缓存的会话ID"""
+        cached_sessions = self._load_cached_sessions()
+        return {s.session_id for s in cached_sessions}
+    
     def analyze(self) -> Dict:
         """
         分析日志文件
@@ -139,6 +250,10 @@ class LogAnalyzer:
         Returns:
             分析结果，包含游戏数量、当前天数、当前物品等
         """
+        # ✅ 先加载缓存的会话
+        cached_sessions = self._load_cached_sessions()
+        cached_session_ids = {s.session_id for s in cached_sessions}
+        
         # 按顺序读取日志文件
         log_files = []
         prev_log = self.log_dir / "Player-prev.log"
@@ -150,16 +265,36 @@ class LogAnalyzer:
             log_files.append(curr_log)
         
         if not log_files:
+            # 如果没有日志文件，返回缓存的会话
+            self.sessions = cached_sessions
             return {
-                "games_count": 0,
+                "games_count": len(cached_sessions),
                 "current_day": 0,
                 "current_items": {"hand": [], "storage": []},
-                "error": "No log files found"
+                "sessions": cached_sessions,
+                "error": "No log files found" if not cached_sessions else None
             }
         
-        # 解析所有日志文件
+        # 解析所有日志文件（只解析新的会话）
         for log_file in log_files:
             self._parse_log_file(log_file)
+        
+        # ✅ 合并缓存的会话和新解析的会话
+        # 过滤掉已经缓存的会话（避免重复）
+        new_sessions = [s for s in self.sessions if s.session_id not in cached_session_ids]
+        
+        # 合并所有会话并按开始时间排序
+        all_sessions = cached_sessions + new_sessions
+        
+        # 按完整日期时间排序
+        all_sessions.sort(key=lambda s: (s.log_file_date or "1970-01-01", s.start_time))
+        
+        self.sessions = all_sessions
+        
+        # ✅ 保存到缓存（包括新解析的会话）
+        if new_sessions:
+            print(f"[LogAnalyzer] 发现 {len(new_sessions)} 个新会话")
+            self._save_sessions_cache()
         
         # 返回分析结果
         total_games = len(self.sessions)
@@ -183,6 +318,16 @@ class LogAnalyzer:
     def _parse_log_file(self, log_file: Path):
         """解析单个日志文件"""
         try:
+            # ✅ 从文件修改时间推断日期
+            import os
+            from datetime import datetime
+            
+            file_mtime = os.path.getmtime(log_file)
+            file_date = datetime.fromtimestamp(file_mtime)
+            self._current_log_file_date = file_date.strftime("%Y-%m-%d")
+            
+            print(f"[LogAnalyzer] 解析日志文件: {log_file.name}, 日期: {self._current_log_file_date}")
+            
             with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
                 for line_num, line in enumerate(f, 1):
                     try:
@@ -197,6 +342,11 @@ class LogAnalyzer:
     
     def _process_line(self, line: str, line_num: int):
         """处理单行日志"""
+        # ✅ 将当前行加入缓存（保留最近5行）
+        self._recent_lines.append(line)
+        if len(self._recent_lines) > self._recent_lines_max:
+            self._recent_lines.pop(0)
+        
         # 提取时间戳
         timestamp_match = re.search(self.TIMESTAMP_PATTERN, line)
         if not timestamp_match:
@@ -264,9 +414,11 @@ class LogAnalyzer:
             # 可能是崩溃或退出，标记为失败
             self.current_session.finish(timestamp, line_num, victory=False)
         
-        # 创建新会话
-        self.current_session = GameSession(timestamp, line_num)
+        # 创建新会话，传入日期信息
+        self.current_session = GameSession(timestamp, line_num, self._current_log_file_date)
         self.sessions.append(self.current_session)
+        
+        print(f"[LogAnalyzer] 新游戏开始: {self.current_session.get_full_start_datetime()} (ID: {self.current_session.session_id})")
     
     def _handle_cards_spawned(self, cards_str: str, timestamp: str, line: str):
         """处理Cards Spawned事件（全量更新）"""
@@ -392,18 +544,12 @@ class LogAnalyzer:
         
         # 检测PVP结束进入ReplayState（战斗回放）
         elif new_state == "ReplayState" and self._in_pvp:
-            # 标记PVP已结束，等待后续状态判断胜负
-            self._in_pvp = False
-            self._pvp_just_ended = True
-        
-        # 检测从ReplayState到ChoiceState或EncounterState（PVP胜利，继续下一天）
-        elif (new_state == "ChoiceState" or new_state == "EncounterState") and getattr(self, '_pvp_just_ended', False):
-            # ReplayState → ChoiceState 或 EncounterState 意味着这局PVP赢了
-            # ChoiceState: 正常进入下一天
-            # EncounterState: 触发了随机事件（也是胜利）
-            victory = True
+            # ✅ 新判断逻辑：往上数第3行，看是否有 "All exit tasks completed"
+            victory = self._check_pvp_victory_from_recent_lines()
             
-            # 记录战斗信息（这时的物品是PVP结束后的阵容）
+            print(f"[DEBUG] PVP结束 → ReplayState，胜负判断: {'胜利' if victory else '失败'}")
+            
+            # 记录战斗信息
             if self._pvp_player_items or self._pvp_opponent_items:
                 self.current_session.add_pvp_battle(
                     self._last_pvp_start or timestamp,
@@ -419,47 +565,63 @@ class LogAnalyzer:
                     except Exception as e:
                         print(f"PVP回调函数执行失败: {e}")
                 
-                # 天数+1（进入下一天）
-                self.current_session.days += 1
+                # 如果胜利，天数+1（进入下一天）
+                if victory:
+                    self.current_session.days += 1
             
-            # 清理PVP相关数据
-            self._pvp_just_ended = False
+            # 标记PVP已结束，清理数据
+            self._in_pvp = False
+            self._pvp_just_ended = True
             self._pvp_player_items = []
             self._pvp_opponent_items = []
         
+        # 检测从ReplayState到ChoiceState或EncounterState（仅用于清理状态）
+        elif (new_state == "ChoiceState" or new_state == "EncounterState") and getattr(self, '_pvp_just_ended', False):
+            # 清理PVP相关状态标记
+            self._pvp_just_ended = False
+        
         # 检测游戏胜利结束
         elif new_state == "EndRunVictoryState":
-            # 如果是从ReplayState直接进入Victory，说明最后一场赢了
-            if getattr(self, '_pvp_just_ended', False):
-                # 记录最后一场PVP（胜利）
-                if self._pvp_player_items or self._pvp_opponent_items:
-                    self.current_session.add_pvp_battle(
-                        self._last_pvp_start or timestamp,
-                        self._pvp_player_items.copy(),
-                        self._pvp_opponent_items.copy(),
-                        victory=True
-                    )
-                self._pvp_just_ended = False
+            # 清理PVP状态标记
+            self._pvp_just_ended = False
             
             self.current_session.finish(timestamp, line_num, victory=True)
             self.current_session = None
         
         # 检测游戏失败结束
         elif new_state == "EndRunDefeatState":
-            # 如果是从ReplayState直接进入Defeat，说明最后一场输了
-            if getattr(self, '_pvp_just_ended', False):
-                # 记录最后一场PVP（失败）
-                if self._pvp_player_items or self._pvp_opponent_items:
-                    self.current_session.add_pvp_battle(
-                        self._last_pvp_start or timestamp,
-                        self._pvp_player_items.copy(),
-                        self._pvp_opponent_items.copy(),
-                        victory=False
-                    )
-                self._pvp_just_ended = False
+            # 清理PVP状态标记
+            self._pvp_just_ended = False
             
             self.current_session.finish(timestamp, line_num, victory=False)
             self.current_session = None
+    
+    def _check_pvp_victory_from_recent_lines(self) -> bool:
+        """
+        检查最近的日志行，判断PVP胜负
+        规则：从当前行往上数第3行，如果有 "All exit tasks completed" 就是赢了
+        
+        Returns:
+            True = 胜利，False = 失败
+        """
+        # 最近的行数应该 >= 4（当前行 + 往上3行）
+        if len(self._recent_lines) < 4:
+            print(f"[DEBUG] 缓存行数不足：{len(self._recent_lines)}，默认判断为失败")
+            return False
+        
+        # _recent_lines[-1] = 当前行（ReplayState转换）
+        # _recent_lines[-2] = 往上1行
+        # _recent_lines[-3] = 往上2行
+        # _recent_lines[-4] = 往上3行 ← 我们要检查这一行
+        third_line_up = self._recent_lines[-4]
+        
+        # 检查是否包含 "All exit tasks completed"
+        has_exit_tasks = "All exit tasks completed" in third_line_up
+        
+        print(f"[DEBUG] 往上第3行内容: {third_line_up.strip()}")
+        print(f"[DEBUG] 是否包含 'All exit tasks completed': {has_exit_tasks}")
+        
+        return has_exit_tasks
 
 
 def get_log_directory() -> str:

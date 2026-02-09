@@ -10,7 +10,7 @@ from gui.utils.frameless_helper import FramelessHelper
 from utils.icon_helper import create_colored_svg_icon
 from gui.pages.monster_overview_page import MonsterOverviewPage
 from gui.pages.settings_page import SettingsPage
-from gui.pages.history_page import HistoryPage
+from gui.pages.history_page_v2 import HistoryPageV2 as HistoryPage
 from gui.pages.encyclopedia_page import EncyclopediaPage
 from utils.i18n import get_i18n
 from loguru import logger
@@ -150,13 +150,13 @@ class SidebarWindow(QWidget):
         # 顶部留白
         nav_layout.addSpacing(10)
         
-        # 导航按钮菜单（使用 SVG 图标）
+        # 导航按钮菜单（使用 SVG 图标）- 历史战绩放在最上面
         menu = [
+            ("history.svg", "历史战绩"),
             ("battle.svg", "野怪一览"),
             ("scanner.svg", "卡牌识别"),
             ("chest.svg", "手头物品"),
             ("search.svg", "百科搜索"),
-            ("history.svg", "历史战绩"),
         ]
         
         # ========== 🎨 SVG 图标配置区域（手动调整） ==========
@@ -226,29 +226,29 @@ class SidebarWindow(QWidget):
     
     def _init_pages(self):
         """初始化内容页面"""
-        # 1. 野怪一览页面
+        # 1. 历史战绩页面（移到第一位，作为默认页面）
+        self.history_page = HistoryPage()
+        self.content_stack.addWidget(self.history_page)
+        
+        # 2. 野怪一览页面
         self.monster_page = MonsterOverviewPage()
         self.content_stack.addWidget(self.monster_page)
         
-        # 2. 卡牌识别页面 (占位)
+        # 3. 卡牌识别页面 (占位)
         scanner_placeholder = QLabel("卡牌识别 - 待实现")
         scanner_placeholder.setAlignment(Qt.AlignCenter)
         scanner_placeholder.setStyleSheet("color: #888; font-size: 16pt;")
         self.content_stack.addWidget(scanner_placeholder)
         
-        # 3. 手头物品页面 (占位)
+        # 4. 手头物品页面 (占位)
         items_placeholder = QLabel("手头物品 - 待实现")
         items_placeholder.setAlignment(Qt.AlignCenter)
         items_placeholder.setStyleSheet("color: #888; font-size: 16pt;")
         self.content_stack.addWidget(items_placeholder)
         
-        # 4. 百科搜索页面
+        # 5. 百科搜索页面
         self.encyclopedia_page = EncyclopediaPage()
         self.content_stack.addWidget(self.encyclopedia_page)
-        
-        # 5. 历史战绩页面
-        self.history_page = HistoryPage()
-        self.content_stack.addWidget(self.history_page)
         
         # 6. ✅ 设置页面（真实页面，替换占位符）
         self.settings_page = SettingsPage()
@@ -258,7 +258,7 @@ class SidebarWindow(QWidget):
         self.settings_page.scale_changed.connect(self._on_settings_scale_changed)
         self.settings_page.language_changed.connect(self._on_settings_language_changed)
         
-        # 默认显示第一个页面（野怪一览）
+        # 默认显示第一个页面（历史战绩）
         self.content_stack.setCurrentIndex(0)
     
     def _init_animations(self):

@@ -25,8 +25,9 @@ class MonsterOverviewPage(QWidget):
         self.current_day = 1
         self.monster_cards = []  # 当前显示的卡片列表
         
-        # 详情悬浮窗（独立窗口）
-        self.detail_window = None
+        # ✅ 在初始化时就创建详情悬浮窗（隐藏状态）
+        self.detail_window = MonsterDetailFloatWindow()
+        self.detail_window.hide()  # 确保初始隐藏
         
         self._init_ui()
     
@@ -202,8 +203,6 @@ class MonsterOverviewPage(QWidget):
             
         monster = self.monster_db.get_monster_by_id(monster_id)
         if monster:
-            if self.detail_window is None:
-                self.detail_window = MonsterDetailFloatWindow()
             self.detail_window.show_floating(monster)
 
     def show_floating_item_detail_by_id(self, item_id):
@@ -211,9 +210,6 @@ class MonsterOverviewPage(QWidget):
         if not item_id:
             return
 
-        if self.detail_window is None:
-            self.detail_window = MonsterDetailFloatWindow()
-            
         parent_window = self.window()
         # Ensure we use show_item_beside which we just added
         if hasattr(self.detail_window, 'show_item_beside'):
@@ -227,18 +223,12 @@ class MonsterOverviewPage(QWidget):
 
     def reset_detail_window_position(self):
         """重置悬浮窗位置"""
-        if self.detail_window is None:
-            self.detail_window = MonsterDetailFloatWindow()
         self.detail_window.reset_position()
         if self.detail_window.isVisible():
             self.detail_window.raise_()
 
     def _on_monster_hovered(self, monster: Monster):
         """怪物卡片被悬浮 - 在侧边显示详情"""
-        # 第一次悬浮时创建详情窗口
-        if self.detail_window is None:
-            self.detail_window = MonsterDetailFloatWindow()
-        
         # 获取主窗口（SidebarWindow）
         parent_window = self.window()
         

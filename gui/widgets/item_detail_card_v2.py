@@ -22,6 +22,11 @@ class ItemDetailCard(QFrame):
                  current_tier: str = "bronze", parent=None, default_expanded: bool = False,
                  enable_tier_click: bool = False, content_scale: float = 1.0, item_data: Dict = None):
         super().__init__(parent)
+        
+        # ✅ 关键修复：在任何UI初始化之前，先设置不触发父窗口重绘的属性
+        self.setAttribute(Qt.WA_DontShowOnScreen, True)  # 暂时不显示到屏幕
+        self.setUpdatesEnabled(False)  # 禁用更新
+        
         # 兼容旧接口
         if item_data is None and item_id:
              # 如果只传了ID没传data (理论上现在都传data了)，留个空fallback
@@ -53,12 +58,19 @@ class ItemDetailCard(QFrame):
         self.border_color = self.tier_colors_map.get(self.starting_tier, "#cd7f32")
         
         self.setObjectName("ItemDetailCard")
-        self._update_style()
         
-        # ✅ 关键修复：设置SizePolicy，防止卡片被垂直拉伸
-        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
-
+        # ✅ 正确策略：
+        # - 水平Preferred：适应容器宽度
+        # - 垂直Minimum：使用内容的最小高度，不拉伸，不压缩
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        
+        # ✅ 延迟样式设置和UI初始化
+        self._update_style()
         self._init_ui()
+        
+        # ✅ 初始化完成后，恢复显示能力
+        self.setAttribute(Qt.WA_DontShowOnScreen, False)
+        self.setUpdatesEnabled(True)
     
     def _update_style(self):
         """更新组件样式（边框颜色始终使用starting_tier）"""

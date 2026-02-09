@@ -1,5 +1,5 @@
 """
-历史战绩页面
+历史战绩页面 - 重新设计版本
 """
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
                                QPushButton, QScrollArea, QFrame)
@@ -10,27 +10,27 @@ import json
 from pathlib import Path
 
 from services.log_analyzer import LogAnalyzer
+from utils.image_loader import ImageLoader, CardSize
 
 
-class HistoryPage(QWidget):
-    """历史战绩页面 - 从游戏日志中读取真实数据"""
+class HistoryPageV2(QWidget):
+    """历史战绩页面 - 重新设计"""
     
     def __init__(self, parent=None):
         super().__init__(parent)
         
-        # 初始化日志分析器 - 使用默认日志目录
+        # 初始化日志分析器
         from services.log_analyzer import get_log_directory
         log_dir = get_log_directory()
-        self.log_analyzer = LogAnalyzer(log_dir)
+        
+        # 传入 items_db 路径
+        items_db_path = Path(__file__).parent.parent.parent / "assets" / "json" / "items_db.json"
+        self.log_analyzer = LogAnalyzer(log_dir, str(items_db_path))
         
         # 加载物品数据库
         self.items_db = self._load_items_db()
         
         self._init_ui()
-        # ❌ 暂时禁用自动加载，减少启动日志输出
-        # self._load_matches()
-        
-        # ✅ 显示提示信息，用户可以手动刷新
         self._show_click_to_load_message()
     
     def _load_items_db(self) -> dict:
@@ -41,7 +41,6 @@ class HistoryPage(QWidget):
             with open(items_db_path, 'r', encoding='utf-8') as f:
                 items_list = json.load(f)
             
-            # 转换为字典（以id为键）
             items_dict = {}
             for item in items_list:
                 item_id = item.get('id')
@@ -122,8 +121,8 @@ class HistoryPage(QWidget):
         header_layout.addStretch()
         
         # 清除缓存按钮
-        clear_cache_btn = QPushButton("清除缓存")
-        clear_cache_btn.setFixedWidth(100)
+        clear_cache_btn = QPushButton("🗑️ 清除缓存")
+        clear_cache_btn.setFixedWidth(120)
         clear_cache_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         clear_cache_btn.clicked.connect(self._clear_cache)
         clear_cache_btn.setStyleSheet("""
@@ -131,7 +130,7 @@ class HistoryPage(QWidget):
                 background-color: #ff9800;
                 color: white;
                 border: none;
-                border-radius: 3px;
+                border-radius: 5px;
                 padding: 8px 15px;
                 font-size: 14px;
                 font-weight: bold;
@@ -152,7 +151,7 @@ class HistoryPage(QWidget):
                 background-color: #4CAF50;
                 color: white;
                 border: none;
-                border-radius: 3px;
+                border-radius: 5px;
                 padding: 8px 15px;
                 font-size: 14px;
                 font-weight: bold;
@@ -165,15 +164,26 @@ class HistoryPage(QWidget):
         
         return header
     
+    def _clear_cache(self):
+        """清除缓存"""
+        try:
+            cache_file = Path(__file__).parent.parent.parent / "user_data" / "game_sessions_cache.json"
+            if cache_file.exists():
+                cache_file.unlink()
+                print("缓存已清除")
+            
+            # 重新加载
+            self._load_matches()
+        except Exception as e:
+            print(f"清除缓存失败: {e}")
+    
     def _show_click_to_load_message(self):
         """显示点击刷新按钮加载的提示信息"""
-        # 清空现有列表
         while self.matches_layout.count():
             item = self.matches_layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
         
-        # 显示提示信息
         hint_label = QLabel("点击右上角 🔄 刷新按钮\n加载游戏历史战绩")
         hint_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         hint_label.setStyleSheet("""
@@ -187,19 +197,16 @@ class HistoryPage(QWidget):
     
     def _load_matches(self):
         """加载对局列表"""
-        # 清空现有列表
         while self.matches_layout.count():
             item = self.matches_layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
         
         try:
-            # 分析日志获取游戏会话
             result = self.log_analyzer.analyze()
             sessions = result.get("sessions", [])
             
             if not sessions:
-                # 显示空状态
                 empty_label = QLabel("暂无历史战绩\n\n请先进行游戏，日志将自动记录")
                 empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 empty_label.setStyleSheet("""
@@ -211,7 +218,6 @@ class HistoryPage(QWidget):
                 """)
                 self.matches_layout.addWidget(empty_label)
             else:
-                # 创建对局卡片 - 倒序显示（最新的在上面）
                 for idx, session in enumerate(reversed(sessions), 1):
                     match_card = self._create_match_card(session, len(sessions) - idx + 1)
                     self.matches_layout.addWidget(match_card)
@@ -219,159 +225,194 @@ class HistoryPage(QWidget):
             print(f"加载对局数据失败: {e}")
             import traceback
             traceback.print_exc()
-            
-            error_label = QLabel(f"加载失败: {str(e)}")
-            error_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            error_label.setStyleSheet("""
-                QLabel {
-                    font-size: 14px;
-                    color: #ff6666;
-                    padding: 30px;
-                }
-            """)
-            self.matches_layout.addWidget(error_label)
         
-        # 添加弹簧
         self.matches_layout.addStretch()
     
     def _create_match_card(self, session, game_number: int) -> QWidget:
-        """
-        创建对局卡片
-        
-        Args:
-            session: 游戏会话对象
-            game_number: 游戏编号
-        """
-        from PySide6.QtWidgets import QFrame
-        
-        # 主卡片容器
+        """创建对局卡片 - 现代化精美设计"""
         card_container = QWidget()
         container_layout = QVBoxLayout(card_container)
-        container_layout.setContentsMargins(0, 0, 0, 0)
+        container_layout.setContentsMargins(0, 0, 0, 10)
         container_layout.setSpacing(0)
         
-        # 头部卡片（可点击展开/收起）
+        # 头部卡片
         header_card = QFrame()
-        header_card.setFixedHeight(120)
         header_card.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         
-        # 确定总体结果
-        result_icon = "🏆" if session.victory else "💀"
-        result_text = "胜利" if session.victory else "失败"
-        result_color = "#4CAF50" if session.victory else "#f44336"
+        # 胜利用渐变绿，失败用渐变红
+        if session.victory:
+            border_color = "#10b981"  # 翠绿
+            gradient_start = "rgba(16, 185, 129, 0.15)"
+            gradient_end = "rgba(5, 150, 105, 0.08)"
+        else:
+            border_color = "#ef4444"  # 鲜红
+            gradient_start = "rgba(239, 68, 68, 0.15)"
+            gradient_end = "rgba(220, 38, 38, 0.08)"
         
         header_layout = QVBoxLayout(header_card)
         header_layout.setContentsMargins(20, 15, 20, 15)
-        header_layout.setSpacing(10)
+        header_layout.setSpacing(12)
         
-        # 第一行：游戏编号、结果、天数
+        # 第一行
         top_row = QHBoxLayout()
         top_row.setSpacing(15)
         
-        # 游戏编号
-        game_num_label = QLabel(f"#{game_number}")
+        # 左侧信息
+        left_info = QHBoxLayout()
+        left_info.setSpacing(12)
+        
+        game_num_label = QLabel(f"游戏 #{game_number}")
         game_num_label.setStyleSheet("""
             QLabel {
-                font-size: 18px;
+                font-size: 16px;
                 font-weight: bold;
-                color: #888888;
+                color: #e5e7eb;
+                background-color: rgba(255, 255, 255, 0.08);
+                padding: 5px 14px;
+                border-radius: 6px;
             }
         """)
-        top_row.addWidget(game_num_label)
+        left_info.addWidget(game_num_label)
         
-        # 结果图标
-        icon_label = QLabel(result_icon)
-        icon_label.setStyleSheet("font-size: 24px;")
-        top_row.addWidget(icon_label)
+        # 结果 - 使用现代化圆形图标
+        result_widget = QWidget()
+        result_layout = QHBoxLayout(result_widget)
+        result_layout.setContentsMargins(0, 0, 0, 0)
+        result_layout.setSpacing(8)
         
-        # 结果文字
-        status_label = QLabel(result_text)
-        status_label.setStyleSheet(f"""
+        # 圆形状态指示器
+        status_indicator = QLabel()
+        status_indicator.setFixedSize(32, 32)
+        status_indicator.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        if session.victory:
+            status_indicator.setStyleSheet("""
+                QLabel {
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                        stop:0 #10b981, stop:1 #059669);
+                    border-radius: 16px;
+                    font-size: 18px;
+                    font-weight: bold;
+                    color: white;
+                    border: 2px solid rgba(16, 185, 129, 0.3);
+                }
+            """)
+            status_indicator.setText("✓")
+        else:
+            status_indicator.setStyleSheet("""
+                QLabel {
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                        stop:0 #ef4444, stop:1 #dc2626);
+                    border-radius: 16px;
+                    font-size: 18px;
+                    font-weight: bold;
+                    color: white;
+                    border: 2px solid rgba(239, 68, 68, 0.3);
+                }
+            """)
+            status_indicator.setText("✗")
+        result_layout.addWidget(status_indicator)
+        
+        status_text = QLabel("胜利" if session.victory else "失败")
+        status_text.setStyleSheet(f"""
             QLabel {{
-                font-size: 18px;
-                font-weight: bold;
-                color: {result_color};
+                font-size: 16px;
+                font-weight: 600;
+                color: {border_color};
             }}
         """)
-        top_row.addWidget(status_label)
+        result_layout.addWidget(status_text)
+        left_info.addWidget(result_widget)
         
         # 天数
-        days_label = QLabel(f"| 第 {session.days} 天")
+        days_label = QLabel(f"第 {session.days} 天")
         days_label.setStyleSheet("""
             QLabel {
-                font-size: 16px;
-                color: #ffcd19;
+                font-size: 14px;
+                color: #fbbf24;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 rgba(251, 191, 36, 0.15),
+                    stop:1 rgba(245, 158, 11, 0.1));
+                padding: 5px 12px;
+                border-radius: 6px;
+                border: 1px solid rgba(251, 191, 36, 0.2);
             }
         """)
-        top_row.addWidget(days_label)
+        left_info.addWidget(days_label)
         
-        # 英雄（如果有）
         if session.hero:
-            hero_label = QLabel(f"| {session.hero}")
+            hero_label = QLabel(f"英雄: {session.hero}")
             hero_label.setStyleSheet("""
                 QLabel {
                     font-size: 14px;
-                    color: #888888;
+                    color: #9ca3af;
                 }
             """)
-            top_row.addWidget(hero_label)
+            left_info.addWidget(hero_label)
         
-        # 时间
-        if session.start_time:
-            # 显示完整日期时间
-            full_datetime = session.get_full_start_datetime()
-            time_label = QLabel(f"| {full_datetime}")
+        top_row.addLayout(left_info)
+        top_row.addStretch()
+        
+        # 右侧
+        right_info = QHBoxLayout()
+        right_info.setSpacing(15)
+        
+        if hasattr(session, 'start_datetime'):
+            datetime_label = QLabel(session.start_datetime.strftime("%Y-%m-%d %H:%M:%S"))
+            datetime_label.setStyleSheet("""
+                QLabel {
+                    font-size: 12px;
+                    color: #6b7280;
+                }
+            """)
+            right_info.addWidget(datetime_label)
+        elif session.start_time:
+            time_label = QLabel(session.start_time)
             time_label.setStyleSheet("""
                 QLabel {
                     font-size: 12px;
-                    color: #666666;
+                    color: #6b7280;
                 }
             """)
-            top_row.addWidget(time_label)
+            right_info.addWidget(time_label)
         
-        top_row.addStretch()
-        
-        # 展开/收起图标
         expand_icon = QLabel("▼")
         expand_icon.setObjectName("expand_icon")
         expand_icon.setStyleSheet("""
             QLabel {
-                font-size: 12px;
-                color: #888888;
+                font-size: 14px;
+                color: #9ca3af;
             }
         """)
-        top_row.addWidget(expand_icon)
+        right_info.addWidget(expand_icon)
         
+        top_row.addLayout(right_info)
         header_layout.addLayout(top_row)
         
-        # 第二行：小局胜负图标（10个一行）
-        battles_grid = QWidget()
-        battles_layout = QVBoxLayout(battles_grid)
-        battles_layout.setContentsMargins(0, 5, 0, 0)
-        battles_layout.setSpacing(5)
+        # 第二行：统计和图标
+        bottom_row = QVBoxLayout()
+        bottom_row.setSpacing(10)
         
-        # 获取所有小局
         battles = session.pvp_battles
         total_battles = len(battles)
         wins = sum(1 for b in battles if b.get('victory', False))
         losses = total_battles - wins
         
-        # 统计信息
-        stats_label = QLabel(f"小局: {wins}胜 {losses}负 (共{total_battles}场)")
+        stats_label = QLabel(f"小局战绩: {wins} 胜 {losses} 负 (共 {total_battles} 场)")
         stats_label.setStyleSheet("""
             QLabel {
-                font-size: 12px;
-                color: #aaaaaa;
+                font-size: 13px;
+                color: #d1d5db;
+                font-weight: 500;
             }
         """)
-        battles_layout.addWidget(stats_label)
+        bottom_row.addWidget(stats_label)
         
-        # 胜负图标（10个一行）
+        # 圆形图标 - 优化样式
         if battles:
             icons_container = QWidget()
-            icons_main_layout = QVBoxLayout(icons_container)
-            icons_main_layout.setContentsMargins(0, 0, 0, 0)
-            icons_main_layout.setSpacing(3)
+            icons_layout = QVBoxLayout(icons_container)
+            icons_layout.setContentsMargins(0, 0, 0, 0)
+            icons_layout.setSpacing(6)
             
             for row_start in range(0, total_battles, 10):
                 row_widget = QWidget()
@@ -382,49 +423,74 @@ class HistoryPage(QWidget):
                 for i in range(row_start, min(row_start + 10, total_battles)):
                     battle = battles[i]
                     is_win = battle.get('victory', False)
-                    icon = "✅" if is_win else "❌"
                     
-                    battle_icon = QLabel(icon)
-                    battle_icon.setFixedSize(20, 20)
-                    battle_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                    battle_icon.setStyleSheet("""
-                        QLabel {
-                            font-size: 14px;
-                        }
-                    """)
-                    row_layout.addWidget(battle_icon)
+                    icon_widget = QLabel()
+                    icon_widget.setFixedSize(26, 26)
+                    icon_widget.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                    
+                    if is_win:
+                        icon_widget.setStyleSheet("""
+                            QLabel {
+                                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                                    stop:0 #10b981, stop:1 #059669);
+                                border-radius: 13px;
+                                font-size: 15px;
+                                font-weight: bold;
+                                color: white;
+                                border: 2px solid rgba(16, 185, 129, 0.4);
+                            }
+                        """)
+                        icon_widget.setText("✓")
+                    else:
+                        icon_widget.setStyleSheet("""
+                            QLabel {
+                                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                                    stop:0 #ef4444, stop:1 #dc2626);
+                                border-radius: 13px;
+                                font-size: 15px;
+                                font-weight: bold;
+                                color: white;
+                                border: 2px solid rgba(239, 68, 68, 0.4);
+                            }
+                        """)
+                        icon_widget.setText("✗")
+                    
+                    row_layout.addWidget(icon_widget)
                 
                 row_layout.addStretch()
-                icons_main_layout.addWidget(row_widget)
+                icons_layout.addWidget(row_widget)
             
-            battles_layout.addWidget(icons_container)
+            bottom_row.addWidget(icons_container)
         
-        header_layout.addWidget(battles_grid)
+        header_layout.addLayout(bottom_row)
         
-        # 详情区域（初始隐藏）
+        # 详情区域
         details_card = self._create_details_card(session)
         details_card.setVisible(False)
         details_card.setObjectName("details_card")
         
-        # 添加到容器
         container_layout.addWidget(header_card)
         container_layout.addWidget(details_card)
         
-        # 卡片样式
+        # 卡片样式 - 使用渐变背景和美化边框
         header_card.setStyleSheet(f"""
             QFrame {{
-                background-color: rgba(50, 45, 40, 0.6);
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 {gradient_start},
+                    stop:1 {gradient_end});
                 border: 1px solid rgba(255, 255, 255, 0.1);
-                border-left: 4px solid {result_color};
-                border-radius: 8px;
+                border-left: 4px solid {border_color};
+                border-radius: 12px;
             }}
             QFrame:hover {{
-                background-color: rgba(70, 60, 50, 0.7);
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 rgba(255, 255, 255, 0.08),
+                    stop:1 rgba(255, 255, 255, 0.03));
                 border-color: rgba(255, 255, 255, 0.2);
+                border-left-color: {border_color};
             }}
         """)
         
-        # 点击事件 - 展开/收起
         def toggle_details(event):
             is_visible = details_card.isVisible()
             details_card.setVisible(not is_visible)
@@ -441,12 +507,10 @@ class HistoryPage(QWidget):
         details_layout.setContentsMargins(20, 15, 20, 15)
         details_layout.setSpacing(15)
         
-        # 每个小局的详情
         for idx, battle in enumerate(session.pvp_battles, 1):
             battle_detail = self._create_battle_detail(battle, idx)
             details_layout.addWidget(battle_detail)
             
-            # 添加分隔线（除了最后一个）
             if idx < len(session.pvp_battles):
                 separator = QFrame()
                 separator.setFrameShape(QFrame.Shape.HLine)
@@ -455,7 +519,7 @@ class HistoryPage(QWidget):
         
         details_card.setStyleSheet("""
             QFrame {
-                background-color: rgba(40, 35, 30, 0.8);
+                background-color: rgba(30, 25, 20, 0.9);
                 border: 1px solid rgba(255, 255, 255, 0.05);
                 border-radius: 8px;
                 margin-top: 5px;
@@ -465,7 +529,7 @@ class HistoryPage(QWidget):
         return details_card
     
     def _create_battle_detail(self, battle: Dict, battle_num: int) -> QWidget:
-        """创建单个小局详情"""
+        """创建单个小局详情 - 带物品图片"""
         detail_widget = QWidget()
         detail_layout = QVBoxLayout(detail_widget)
         detail_layout.setContentsMargins(0, 0, 0, 0)
@@ -474,7 +538,6 @@ class HistoryPage(QWidget):
         # 标题行
         title_row = QHBoxLayout()
         
-        # 小局编号
         num_label = QLabel(f"小局 #{battle_num}")
         num_label.setStyleSheet("""
             QLabel {
@@ -485,7 +548,6 @@ class HistoryPage(QWidget):
         """)
         title_row.addWidget(num_label)
         
-        # 胜负
         is_win = battle.get('victory', False)
         result_icon = "✅ 胜利" if is_win else "❌ 失败"
         result_color = "#4CAF50" if is_win else "#f44336"
@@ -500,7 +562,6 @@ class HistoryPage(QWidget):
         """)
         title_row.addWidget(result_label)
         
-        # 天数
         day_label = QLabel(f"| 第 {battle.get('day', '?')} 天")
         day_label.setStyleSheet("""
             QLabel {
@@ -510,7 +571,6 @@ class HistoryPage(QWidget):
         """)
         title_row.addWidget(day_label)
         
-        # 时间
         if battle.get('start_time'):
             time_label = QLabel(f"| {battle.get('start_time')}")
             time_label.setStyleSheet("""
@@ -524,7 +584,7 @@ class HistoryPage(QWidget):
         title_row.addStretch()
         detail_layout.addLayout(title_row)
         
-        # 使用的物品
+        # 使用的物品 - 横向显示图片
         player_items = battle.get('player_items', [])
         if player_items:
             items_label = QLabel("使用物品:")
@@ -537,90 +597,87 @@ class HistoryPage(QWidget):
             """)
             detail_layout.addWidget(items_label)
             
-            # 物品网格
+            # 物品图片网格
             items_grid = QWidget()
             items_layout = QHBoxLayout(items_grid)
             items_layout.setContentsMargins(10, 5, 0, 0)
-            items_layout.setSpacing(10)
+            items_layout.setSpacing(8)
             
-            # 按位置分组
             hand_items = [i for i in player_items if i.get('location') == 'Hand']
             
-            for item in sorted(hand_items, key=lambda x: int(x.get('socket', 0)))[:10]:  # 最多显示10个
-                item_name = self._get_item_name(item.get('template_id', ''))
-                
-                item_label = QLabel(item_name)
-                item_label.setStyleSheet("""
-                    QLabel {
-                        font-size: 11px;
-                        color: #cccccc;
-                        background-color: rgba(255, 255, 255, 0.05);
-                        padding: 3px 8px;
-                        border-radius: 3px;
-                    }
-                """)
-                items_layout.addWidget(item_label)
+            for item in sorted(hand_items, key=lambda x: int(x.get('socket', 0)))[:10]:
+                item_id = item.get('template_id', '')
+                item_widget = self._create_item_icon(item_id)
+                if item_widget:
+                    items_layout.addWidget(item_widget)
             
             items_layout.addStretch()
             detail_layout.addWidget(items_grid)
         
         return detail_widget
     
-    def _get_item_name(self, template_id: str) -> str:
-        """根据template_id获取物品名称"""
-        if not template_id or template_id == "unknown":
-            return "未知物品"
+    def _create_item_icon(self, item_id: str) -> QWidget:
+        """创建物品图标（类似怪物详情中的掉落物）"""
+        if not item_id or item_id == "unknown":
+            return None
         
-        # 从items_db查找
-        item_data = self.items_db.get(template_id)
-        if item_data:
-            # 优先返回中文名
-            name_cn = item_data.get('name_cn', '')
-            if name_cn:
-                return name_cn
-            # 其次返回英文名
-            name_en = item_data.get('name', '')
-            if name_en:
-                return name_en
+        # 获取物品数据
+        item_data = self.items_db.get(item_id)
+        if not item_data:
+            return None
         
-        # 返回ID的简短形式
-        return template_id.split('_')[-1] if '_' in template_id else template_id
-    
-    def _clear_cache(self):
-        """清除会话缓存"""
-        from services.log_analyzer import get_log_directory
-        log_dir = Path(get_log_directory())
-        cache_file = log_dir / "sessions_cache.json"
+        # 获取物品大小
+        size_str = item_data.get("size", "Medium / 中")
+        size_en = size_str.split("/")[0].strip().lower()
         
-        try:
-            if cache_file.exists():
-                cache_file.unlink()
-                print("[HistoryPage] 缓存已清除")
-                
-                # 显示提示信息
-                hint_label = QLabel("✅ 缓存已清除\n点击刷新按钮重新加载")
-                hint_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                hint_label.setStyleSheet("""
-                    QLabel {
-                        font-size: 16px;
-                        color: #4CAF50;
-                        padding: 50px;
-                    }
-                """)
-                
-                # 清空当前列表
-                while self.matches_layout.count():
-                    item = self.matches_layout.takeAt(0)
-                    if item.widget():
-                        item.widget().deleteLater()
-                
-                self.matches_layout.addWidget(hint_label)
-            else:
-                print("[HistoryPage] 没有找到缓存文件")
-        except Exception as e:
-            print(f"[HistoryPage] 清除缓存失败: {e}")
+        if "small" in size_en:
+            card_size = CardSize.SMALL
+        elif "large" in size_en:
+            card_size = CardSize.LARGE
+        else:
+            card_size = CardSize.MEDIUM
+        
+        # 获取品级
+        tier = item_data.get("starting_tier", "Bronze")
+        if "/" in tier:
+            tier = tier.split("/")[0].strip()
+        tier_lower = tier.lower()
+        
+        # 边框颜色
+        tier_colors = {
+            "bronze": "#CD7F32",
+            "silver": "#C0C0C0",
+            "gold": "#FFD700",
+            "diamond": "#B9F2FF",
+            "legendary": "#FF4500"
+        }
+        border_color = tier_colors.get(tier_lower, "#CD7F32")
+        
+        # 计算尺寸
+        base_height = 70
+        if card_size == CardSize.SMALL:
+            img_w = int(base_height * 0.5)
+        elif card_size == CardSize.LARGE:
+            img_w = int(base_height * 1.5)
+        else:
+            img_w = base_height
+        
+        img_h = base_height
+        
+        # 创建容器
+        container = QLabel()
+        container.setFixedSize(img_w + 4, img_h + 4)
+        container.setStyleSheet(f"border: 2px solid {border_color}; border-radius: 4px; background: transparent;")
+        
+        # 加载图片
+        pix = ImageLoader.load_card_image(item_id, card_size, height=img_h, with_border=False)
+        if not pix.isNull():
+            scaled = pix.scaled(img_w, img_h, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            container.setPixmap(scaled)
+            container.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        return container
     
     def refresh(self):
         """刷新页面"""
         self._load_matches()
-
