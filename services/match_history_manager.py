@@ -58,7 +58,7 @@ class MatchHistoryManager:
         添加一场对局记录
         
         Args:
-            session_data: 从LogAnalyzer获取的session数据
+            session_data: 从LogAnalyzer获取的session数据（GameSession对象）
             hero: 使用的英雄名称
             
         Returns:
@@ -66,28 +66,61 @@ class MatchHistoryManager:
         """
         history = self._load_history()
         
-        # 生成唯一ID
-        match_id = str(uuid.uuid4())
+        # ✅ 使用session的唯一ID（基于日期+时间生成）
+        if hasattr(session_data, 'session_id'):
+            match_id = session_data.session_id
+        else:
+            # 降级方案：使用UUID
+            match_id = str(uuid.uuid4())
+        
+        # ✅ 检查是否已存在（避免重复添加）
+        existing_ids = {m.get('match_id') for m in history.get('matches', [])}
+        if match_id in existing_ids:
+            print(f"[MatchHistoryManager] 会话 {match_id} 已存在，跳过")
+            return match_id
+        
+        # ✅ 提取日期时间信息
+        if hasattr(session_data, 'get_full_start_datetime'):
+            start_datetime = session_data.get_full_start_datetime()
+        else:
+            start_datetime = session_data.get("start_time", "")
+        
+        if hasattr(session_data, 'get_full_end_datetime'):
+            end_datetime = session_data.get_full_end_datetime()
+        else:
+            end_datetime = session_data.get("end_time", "")
+        
+        # ✅ 记录游戏日期（用于后续筛选）
+        game_date = ""
+        if hasattr(session_data, 'log_file_date'):
+            game_date = session_data.log_file_date
+        elif start_datetime:
+            # 尝试从start_datetime提取日期
+            if " " in start_datetime:
+                game_date = start_datetime.split()[0]
         
         # 构建对局数据
         match_record = {
             "match_id": match_id,
-            "hero": hero,
-            "start_time": session_data.get("start_time", ""),
-            "end_time": session_data.get("end_time", ""),
-            "days": session_data.get("days", 0),
-            "victory": session_data.get("victory", False),
-            "is_finished": session_data.get("is_finished", False),
-            "created_at": datetime.now().isoformat(),
+            "hero": getattr(session_data, 'hero', hero) if hasattr(session_data, 'hero') else hero,
+            "start_time": start_datetime,
+            "end_time": end_datetime,
+            "game_date": game_date,  # ✅ 新增：游戏日期
+            "days": getattr(session_data, 'days', 0) if hasattr(session_data, 'days') else session_data.get("days", 0),
+            "victory": getattr(session_data, 'victory', False) if hasattr(session_data, 'victory') else session_data.get("victory", False),
+            "is_finished": getattr(session_data, 'is_finished', False) if hasattr(session_data, 'is_finished') else session_data.get("is_finished", False),
+            "created_at": datetime.now().isoformat(),  # 记录添加到数据库的时间
             "pvp_battles": []
         }
         
         # 添加PVP战斗记录
-        for pvp in session_data.get("pvp_battles", []):
+        pvp_battles = getattr(session_data, 'pvp_battles', []) if hasattr(session_data, 'pvp_battles') else session_data.get("pvp_battles", [])
+        for pvp in pvp_battles:
             battle_record = {
                 "day": pvp.get("day", 0),
                 "start_time": pvp.get("start_time", ""),
-                "victory": False,  # 暂时无法判断单场PVP胜负，需要后续补充
+                "victory": pvp.get("victory", False),
+                "duration": pvp.get("duration"),  # ✅ 新增：战斗耗时
                 "player_items": pvp.get("player_items", []),
                 "opponent_items": pvp.get("opponent_items", []),
                 "screenshot": None  # 截图路径，初始为None

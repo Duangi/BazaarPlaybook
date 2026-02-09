@@ -64,11 +64,6 @@ class MonsterDetailFloatWindow(QWidget):
         # ✅ 单例模式：预创建所有 ItemDetailCard 实例（只创建一次，复用）
         self._skill_cards_cache = {}  # {skill_id: ItemDetailCard}
         self._item_card_cache = None  # 物品详情卡片（单例）
-        
-        # 缩放拖动状态
-        self._scaling = False
-        self._scale_start_pos = None
-        self._scale_start_scale = 1.0
 
         # 延迟关闭定时器
         self.hide_timer = QTimer(self)
@@ -240,18 +235,24 @@ class MonsterDetailFloatWindow(QWidget):
         """
         窗口大小改变时：
         1. 保存新的大小
-        2. 重新定位以保持与sidebar紧贴
-        3. 更新缩放手柄位置
+        2. 重新定位以保持与sidebar紧贴（仅在非用户调整时）
+        3. 更新缩放控制条位置
         """
         super().resizeEvent(event)
         
-        # ✅ 更新缩放手柄位置
-        self._update_scale_handle_position()
+        # ✅ 更新缩放控制条位置
+        self._update_scale_control_position()
         
         # 只在窗口可见且有锚点时处理
         if self.isVisible() and hasattr(self, '_anchor_widget') and self._anchor_widget:
             # 保存大小
             self._save_window_size()
+            
+            # ✅ 【修复】只在非拖动调整大小时才重新定位
+            # 如果用户正在拖动调整大小，不要改变窗口位置，否则会抖动
+            if hasattr(self, 'frameless_helper') and self.frameless_helper.is_resizing:
+                # 用户正在拖动调整大小，跳过重新定位
+                return
             
             # ✅ 重新计算位置以保持紧贴
             from PySide6.QtWidgets import QApplication
@@ -718,7 +719,21 @@ class MonsterDetailFloatWindow(QWidget):
         super().enterEvent(event)
 
     def leaveEvent(self, event):
-        """鼠标离开 - 启动延迟隐藏"""
+        """鼠标离开 - 启动延迟隐藏（需验证是否真的离开窗口）"""
+        # 🔥 修复：检查鼠标是否真的离开了窗口范围
+        # 当鼠标在子控件（如缩放按钮、按钮）上时，可能会错误触发 leaveEvent
+        from PySide6.QtGui import QCursor
+        global_pos = QCursor.pos()
+        local_pos = self.mapFromGlobal(global_pos)
+        
+        # 检查鼠标是否还在窗口矩形内（添加2px容差避免边缘抖动）
+        expanded_rect = self.rect().adjusted(-2, -2, 2, 2)
+        if expanded_rect.contains(local_pos):
+            # 鼠标还在窗口内，不应该隐藏
+            super().leaveEvent(event)
+            return
+        
+        # 真的离开了，启动隐藏定时器
         self.hide_timer.start()
         
         # Restore focus
@@ -745,82 +760,105 @@ class MonsterDetailFloatWindow(QWidget):
             self._update_content()
 
     def _create_scale_handle(self):
-        """创建右下角的缩放手柄"""
-        self.scale_handle = QLabel(self)
-        self.scale_handle.setObjectName("ScaleHandle")
-        self.scale_handle.setText("⇲")  # 对角线箭头
-        self.scale_handle.setFixedSize(24, 24)
-        self.scale_handle.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.scale_handle.setStyleSheet("""
-            QLabel#ScaleHandle {
+        """创建右下角的缩放控制条（+/- 按钮）"""
+        from PySide6.QtWidgets import QPushButton
+        
+        # 容器
+        self.scale_control = QWidget(self)
+        self.scale_control.setObjectName("ScaleControl")
+        control_layout = QHBoxLayout(self.scale_control)
+        control_layout.setContentsMargins(4, 2, 4, 2)
+        control_layout.setSpacing(3)
+        
+        # 样式
+        button_style = """
+            QPushButton {
                 background: rgba(245, 158, 11, 0.3);
-                border: 1px solid rgba(245, 158, 11, 0.6);
-                border-radius: 4px;
+                border: 1px solid rgba(245, 158, 11, 0.5);
+                border-radius: 3px;
                 color: #f59e0b;
-                font-size: 14pt;
+                font-size: 14px;
                 font-weight: bold;
+                padding: 2px 6px;
             }
-            QLabel#ScaleHandle:hover {
+            QPushButton:hover {
                 background: rgba(245, 158, 11, 0.5);
                 border-color: #f59e0b;
             }
+            QPushButton:pressed {
+                background: rgba(245, 158, 11, 0.7);
+            }
+        """
+        
+        # 缩小按钮
+        btn_minus = QPushButton("−")
+        btn_minus.setFixedSize(22, 22)
+        btn_minus.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_minus.setStyleSheet(button_style)
+        btn_minus.clicked.connect(lambda: self._adjust_scale(-0.1))
+        control_layout.addWidget(btn_minus)
+        
+        # 当前比例显示
+        self.scale_label = QLabel("100%")
+        self.scale_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.scale_label.setFixedWidth(45)
+        self.scale_label.setStyleSheet("""
+            QLabel {
+                color: #f59e0b;
+                font-size: 10px;
+                font-weight: 600;
+                background: transparent;
+            }
         """)
-        self.scale_handle.setCursor(Qt.CursorShape.SizeFDiagCursor)
-        self.scale_handle.setMouseTracking(True)
+        self.scale_label.setToolTip("缩放比例\n（重新打开窗口生效）")
+        control_layout.addWidget(self.scale_label)
         
-        # 安装事件过滤器来处理缩放拖动
-        self.scale_handle.mousePressEvent = self._on_scale_press
-        self.scale_handle.mouseMoveEvent = self._on_scale_move
-        self.scale_handle.mouseReleaseEvent = self._on_scale_release
+        # 放大按钮
+        btn_plus = QPushButton("+")
+        btn_plus.setFixedSize(22, 22)
+        btn_plus.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_plus.setStyleSheet(button_style)
+        btn_plus.clicked.connect(lambda: self._adjust_scale(0.1))
+        control_layout.addWidget(btn_plus)
         
-        # 初始位置（在 resizeEvent 中更新）
-        self._update_scale_handle_position()
+        # 容器样式
+        self.scale_control.setStyleSheet("""
+            #ScaleControl {
+                background: rgba(15, 15, 20, 0.85);
+                border: 1px solid rgba(245, 158, 11, 0.4);
+                border-radius: 4px;
+            }
+        """)
+        
+        # 初始位置和大小
+        self.scale_control.adjustSize()
+        self._update_scale_control_position()
+        self._update_scale_label()
     
-    def _update_scale_handle_position(self):
-        """更新缩放手柄的位置（右下角）"""
-        if hasattr(self, 'scale_handle'):
-            x = self.width() - self.scale_handle.width() - 8
-            y = self.height() - self.scale_handle.height() - 8
-            self.scale_handle.move(x, y)
-            self.scale_handle.raise_()  # 确保在最上层
+    def _update_scale_control_position(self):
+        """更新缩放控制条的位置（右下角）"""
+        if hasattr(self, 'scale_control'):
+            x = self.width() - self.scale_control.width() - 8
+            y = self.height() - self.scale_control.height() - 8
+            self.scale_control.move(x, y)
+            self.scale_control.raise_()
     
-    def _on_scale_press(self, event):
-        """开始缩放拖动"""
-        if event.button() == Qt.MouseButton.LeftButton:
-            self._scaling = True
-            self._scale_start_pos = event.globalPosition().toPoint()
-            self._scale_start_scale = self.content_scale
-            event.accept()
-    
-    def _on_scale_move(self, event):
-        """缩放拖动中"""
-        if self._scaling and self._scale_start_pos:
-            # 计算鼠标移动距离（斜向）
-            current_pos = event.globalPosition().toPoint()
-            delta = current_pos - self._scale_start_pos
-            
-            # 使用对角线距离来计算缩放变化
-            # 向右下拖动增加，向左上拖动减少
-            diagonal_delta = (delta.x() + delta.y()) / 2.0
-            scale_change = diagonal_delta / 200.0  # 每200px改变1.0倍
-            
-            new_scale = self._scale_start_scale + scale_change
-            new_scale = max(0.5, min(2.0, new_scale))  # 限制范围 0.5-2.0
-            
-            if abs(new_scale - self.content_scale) > 0.01:  # 避免过于频繁的更新
-                self.content_scale = new_scale
-                self._apply_content_scale()
-                
-            event.accept()
-    
-    def _on_scale_release(self, event):
-        """结束缩放拖动"""
-        if event.button() == Qt.MouseButton.LeftButton:
-            self._scaling = False
-            self._scale_start_pos = None
-            # 保存缩放比例
+    def _adjust_scale(self, delta: float):
+        """调整缩放比例"""
+        new_scale = self.content_scale + delta
+        new_scale = max(0.5, min(2.0, new_scale))
+        
+        if abs(new_scale - self.content_scale) > 0.01:
+            self.content_scale = new_scale
+            self._update_scale_label()
+            # 🔥 修复：不重建UI，只保存设置，下次打开时生效
+            # self._apply_content_scale()  # 这会导致重绘抖动
             self.settings.setValue("content_scale", self.content_scale)
-            event.accept()
+    
+    def _update_scale_label(self):
+        """更新比例标签"""
+        if hasattr(self, 'scale_label'):
+            self.scale_label.setText(f"{int(self.content_scale * 100)}%")
     
     def _apply_content_scale(self):
         """应用内容缩放比例"""
@@ -855,11 +893,18 @@ class MonsterDetailFloatWindow(QWidget):
         """
         # 如果点击的是当前已展开的物品，则移除卡片
         if self._current_expanded_item_id == item_id and self._current_item_detail_card:
+            # 🔥 保存滚动位置
+            scroll_bar = self.scroll.verticalScrollBar()
+            saved_scroll_pos = scroll_bar.value()
+            
             # 从布局中移除并删除卡片
             self.content_layout.removeWidget(self._current_item_detail_card)
             self._current_item_detail_card.deleteLater()
             self._current_item_detail_card = None
             self._current_expanded_item_id = None
+            
+            # 🔥 恢复滚动位置
+            QTimer.singleShot(10, lambda: scroll_bar.setValue(saved_scroll_pos))
             return
         
         # 如果已经有展开的卡片，先移除
@@ -914,12 +959,16 @@ class MonsterDetailFloatWindow(QWidget):
             # 找到 addStretch 的位置（应该是最后一个item）
             stretch_index = self.content_layout.count() - 1
             
+            # 🔥 保存当前滚动位置，避免插入widget后自动滚动
+            scroll_bar = self.scroll.verticalScrollBar()
+            saved_scroll_pos = scroll_bar.value()
+            
             # 在 stretch 之前插入卡片
             self.content_layout.insertWidget(stretch_index, item_card)
             self._current_item_detail_card = item_card
             
-            # 自动滚动到卡片位置，确保新展开的内容可见
-            QTimer.singleShot(100, lambda: self.scroll.ensureWidgetVisible(item_card))
+            # 🔥 恢复原来的滚动位置，保持战利品图标在视野中的相对位置
+            QTimer.singleShot(10, lambda: scroll_bar.setValue(saved_scroll_pos))
         else:
             print(f"[ItemDetail] No data found for item: {item_id}")
     

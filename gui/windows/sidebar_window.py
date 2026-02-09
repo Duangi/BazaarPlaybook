@@ -10,8 +10,9 @@ from gui.utils.frameless_helper import FramelessHelper
 from utils.icon_helper import create_colored_svg_icon
 from gui.pages.monster_overview_page import MonsterOverviewPage
 from gui.pages.settings_page import SettingsPage
-from gui.pages.history_page_v2 import HistoryPageV2 as HistoryPage
+from gui.pages.history_page_holographic import HistoryPageHolographic as HistoryPage
 from gui.pages.encyclopedia_page import EncyclopediaPage
+from gui.pages.current_items_page import CurrentItemsPage
 from utils.i18n import get_i18n
 from loguru import logger
 
@@ -240,11 +241,9 @@ class SidebarWindow(QWidget):
         scanner_placeholder.setStyleSheet("color: #888; font-size: 16pt;")
         self.content_stack.addWidget(scanner_placeholder)
         
-        # 4. 手头物品页面 (占位)
-        items_placeholder = QLabel("手头物品 - 待实现")
-        items_placeholder.setAlignment(Qt.AlignCenter)
-        items_placeholder.setStyleSheet("color: #888; font-size: 16pt;")
-        self.content_stack.addWidget(items_placeholder)
+        # 4. 手头物品页面
+        self.items_page = CurrentItemsPage()
+        self.content_stack.addWidget(self.items_page)
         
         # 5. 百科搜索页面
         self.encyclopedia_page = EncyclopediaPage()

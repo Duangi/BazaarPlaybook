@@ -5,7 +5,7 @@
     "best_ocr_engine": "Windows_Native",
     "auto_scan_enabled": true,
     "overlay_enabled": false,
-    "debug_mode": true,
+    "debug_mode": false,
     "hover_delay": 200,
     "detail_hotkey": "mouse:right"
 }
