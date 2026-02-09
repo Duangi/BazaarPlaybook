@@ -12,8 +12,27 @@ class FuzzySearcher:
             with open(items_db_path, 'r', encoding='utf-8') as f:
                 self.items_db = json.load(f)
             
-            # 建立 名字 -> ID 的映射
-            self.name_to_id = {item['name_cn']: item['id'] for item in self.items_db}
+            self.name_to_id = {}
+            
+            # 判断数据库类型
+            if isinstance(self.items_db, list):
+                # 物品数据库 (List of Dicts)
+                # item['name_cn'] -> item['id']
+                for item in self.items_db:
+                    name = item.get('name_cn', '')
+                    item_id = item.get('id', '')
+                    if name and item_id:
+                        self.name_to_id[name] = item_id
+            
+            elif isinstance(self.items_db, dict):
+                # 怪物数据库 (Dict of Dicts)
+                # key (中文名) -> key (作为ID)
+                for key, data in self.items_db.items():
+                    # 优先使用 name_zh，如果不存在则使用 key
+                    name = data.get('name_zh', key)
+                    # 对于怪物，我们用 key 作为唯一标识符
+                    self.name_to_id[name] = key
+
             # 提取所有可搜索的名字列表
             self.all_names = list(self.name_to_id.keys())
             

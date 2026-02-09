@@ -15,6 +15,8 @@ from gui.styles import SCROLLBAR_STYLE
 from gui.utils.frameless_helper import FramelessHelper
 
 
+from utils.window_utils import get_foreground_window_title, restore_focus_to_game
+
 class MonsterDetailFloatWindow(QWidget):
     """
     怪物详情悬浮窗
@@ -27,7 +29,14 @@ class MonsterDetailFloatWindow(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        
+        # --- Focus Tracking ---
+        self.last_focused_window = None
+        # ----------------------
+
         self.current_monster = None
+        self.current_item_id = None
+        self.display_mode = 'monster'
         self.i18n = get_i18n()
         # track a single active item popup to avoid overlapping popups
         self._active_item_popup = None
@@ -60,16 +69,53 @@ class MonsterDetailFloatWindow(QWidget):
             self,
             margin=5,           # 边缘检测区域
             snap_to_top=False,  # 不吸附顶部
-            enable_drag=False,  # 禁用拖拽（位置由show_beside控制）
+            enable_drag=True,   # ✅ 启用拖拽
             enable_resize=True, # ✅ 启用调整大小
             debug=False
         )
         
-        # 加载保存的窗口大小（如果有）
-        self._load_window_size()
+        # 加载保存的窗口状态
+        self._load_window_state()
         
         # ✅ 创建缩放手柄（右下角）
         self._create_scale_handle()
+    def closeEvent(self, event):
+        """窗口关闭时保存状态"""
+        self._save_window_state()
+        super().closeEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        """鼠标释放时保存位置 (拖拽结束)"""
+        super().mouseReleaseEvent(event)
+        self._save_window_state()
+
+    def _save_window_state(self):
+        """保存窗口位置和大小"""
+        self.settings.setValue("pos", self.pos())
+        self.settings.setValue("size", self.size())
+        self.settings.setValue("content_scale", self.content_scale)
+
+    def _load_window_state(self):
+        """加载窗口位置和大小"""
+        # 恢复大小
+        size = self.settings.value("size", QSize(400, 600))
+        self.resize(size)
+        
+        # 恢复位置 (如果有保存，且在屏幕范围内)
+        pos = self.settings.value("pos")
+        if pos:
+            self.move(pos)
+        else:
+            # 默认居中
+            self.reset_position()
+
+    def reset_position(self):
+        """重置位置到屏幕中心"""
+        screen = self.screen().availableGeometry()
+        x = (screen.width() - self.width()) // 2
+        y = (screen.height() - self.height()) // 2
+        self.move(x + screen.left(), y + screen.top())
+        self._save_window_state()
 
     def _init_window(self):
         """初始化窗口属性"""
@@ -90,44 +136,55 @@ class MonsterDetailFloatWindow(QWidget):
 
     def _init_ui(self):
         """初始化 UI"""
-        # 根布局
-        root_layout = QVBoxLayout(self)
-        root_layout.setContentsMargins(0, 0, 0, 0)
+        print("[DEBUG] _init_ui started")
+        try:
+            # 根布局
+            root_layout = QVBoxLayout(self)
+            root_layout.setContentsMargins(0, 0, 0, 0)
 
-        # 主容器（带金色边框）
-        self.main_container = QFrame()
-        self.main_container.setObjectName("FloatWindow")
-        self.main_container.setStyleSheet("""
-            #FloatWindow {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 rgba(10, 10, 12, 0.95),
-                    stop:1 rgba(5, 5, 8, 0.95));
-                border-right: 2px solid #f59e0b;
-                border-radius: 8px;
-            }
-        """)
-        root_layout.addWidget(self.main_container)
+            print("[DEBUG] creating main_container")
+            # 主容器（带金色边框）
+            self.main_container = QFrame()
+            self.main_container.setObjectName("FloatWindow")
+            self.main_container.setStyleSheet("""
+                #FloatWindow {
+                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                        stop:0 rgba(10, 10, 12, 0.95),
+                        stop:1 rgba(5, 5, 8, 0.95));
+                    border-right: 2px solid #f59e0b;
+                    border-radius: 8px;
+                }
+            """)
+            root_layout.addWidget(self.main_container)
 
-        # 主容器布局
-        container_layout = QVBoxLayout(self.main_container)
-        container_layout.setContentsMargins(15, 15, 15, 15)
-        container_layout.setSpacing(12)
+            # 主容器布局
+            container_layout = QVBoxLayout(self.main_container)
+            container_layout.setContentsMargins(15, 15, 15, 15)
+            container_layout.setSpacing(12)
 
-        # 滚动区域
-        self.scroll = QScrollArea()
-        self.scroll.setWidgetResizable(True)
-        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        # 使用共享滚动样式
-        self.scroll.setStyleSheet(SCROLLBAR_STYLE + "QScrollArea { border: none; background: transparent; }")
+            print("[DEBUG] creating scroll")
+            # 滚动区域
+            self.scroll = QScrollArea()
+            self.scroll.setWidgetResizable(True)
+            self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            # 使用共享滚动样式
+            self.scroll.setStyleSheet(SCROLLBAR_STYLE + "QScrollArea { border: none; background: transparent; }")
 
-        self.content_widget = QWidget()
-        self.content_widget.setStyleSheet("background: transparent;")
-        self.content_layout = QVBoxLayout(self.content_widget)
-        self.content_layout.setSpacing(10)
-        self.content_layout.setContentsMargins(0, 0, 0, 0)
+            self.content_widget = QWidget()
+            self.content_widget.setStyleSheet("background: transparent;")
+            self.content_layout = QVBoxLayout(self.content_widget)
+            self.content_layout.setSpacing(10)
+            self.content_layout.setContentsMargins(0, 0, 0, 0)
+            
+            print("[DEBUG] content_layout created:", self.content_layout)
 
-        self.scroll.setWidget(self.content_widget)
-        container_layout.addWidget(self.scroll)
+            self.scroll.setWidget(self.content_widget)
+            container_layout.addWidget(self.scroll)
+            print("[DEBUG] _init_ui finished")
+        except Exception as e:
+            print(f"[ERROR] _init_ui failed: {e}")
+            import traceback
+            traceback.print_exc()
 
     def _load_window_size(self):
         """加载保存的窗口大小"""
@@ -192,14 +249,40 @@ class MonsterDetailFloatWindow(QWidget):
             # 移动到新位置
             self.move(x, y)
     
+    def show_floating(self, monster):
+        """
+        显示浮动详情 (使用保存的位置或默认位置)
+        """
+        self.display_mode = 'monster'
+        self.current_monster = monster
+        self._update_content()
+        
+        # 恢复位置
+        self._load_window_state()
+        
+        self.show()
+        self.raise_()
+
+    def show_item_beside(self, anchor_widget, item_id):
+        """
+        显示物品详情在指定窗口旁边
+        """
+        self.display_mode = 'item'
+        self.current_item_id = item_id
+        self._update_content()
+        self._position_beside(anchor_widget)
+
     def show_beside(self, anchor_widget, monster):
         """
         显示在指定窗口旁边（自动选择左侧或右侧）
         ✅ 调整大小后仍保持紧贴sidebar
         """
+        self.display_mode = 'monster'
         self.current_monster = monster
         self._update_content()
+        self._position_beside(anchor_widget)
 
+    def _position_beside(self, anchor_widget):
         from PySide6.QtWidgets import QApplication
 
         # 获取屏幕和窗口信息
@@ -272,6 +355,14 @@ class MonsterDetailFloatWindow(QWidget):
             w = item.widget()
             if w:
                 w.deleteLater()
+
+        if self.display_mode == 'item' and self.current_item_id:
+             scale = self.content_scale
+             # Create ItemDetailCard
+             item_card = ItemDetailCard(item_id=self.current_item_id, item_type="item",
+                                        default_expanded=True, enable_tier_click=True, content_scale=scale)
+             self.content_layout.addWidget(item_card)
+             return
 
         if not self.current_monster:
             return
@@ -581,11 +672,28 @@ class MonsterDetailFloatWindow(QWidget):
     def enterEvent(self, event):
         """鼠标进入 - 取消隐藏定时器"""
         self.hide_timer.stop()
+        
+        # Focus Tracking logic
+        try:
+            current_title = get_foreground_window_title()
+            if current_title and "The Bazaar" in current_title: 
+                self.last_focused_window = "The Bazaar"
+            else:
+                self.last_focused_window = None
+        except:
+            pass
+            
         super().enterEvent(event)
 
     def leaveEvent(self, event):
         """鼠标离开 - 启动延迟隐藏"""
         self.hide_timer.start()
+        
+        # Restore focus
+        if self.last_focused_window == "The Bazaar":
+            restore_focus_to_game("The Bazaar")
+            self.last_focused_window = None
+            
         super().leaveEvent(event)
 
     def request_hide(self):

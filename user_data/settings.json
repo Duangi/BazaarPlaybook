@@ -1,6 +1,11 @@
 {
-    "yolo_fps": 4,
-    "best_ocr": "Windows_Native",
-    "preferred_provider": "CPUExecutionProvider",
-    "best_ocr_engine": "Windows_Native"
+    "yolo_fps": 3,
+    "best_ocr": "RapidOCR_ONNX",
+    "preferred_provider": "AzureExecutionProvider",
+    "best_ocr_engine": "Windows_Native",
+    "auto_scan_enabled": true,
+    "overlay_enabled": false,
+    "debug_mode": true,
+    "hover_delay": 200,
+    "detail_hotkey": "mouse:right"
 }

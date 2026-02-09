@@ -15,7 +15,9 @@ class ConfigManager:
         return {
             "yolo_fps": 10,
             "best_ocr": "Windows_Native",
-            "preferred_provider": "CPUExecutionProvider"
+            "preferred_provider": "CPUExecutionProvider",
+            "hover_delay": 200, # ms
+            "detail_hotkey": "" # e.g. "shift+d" or "F2"
         }
 
     def save(self, new_settings):

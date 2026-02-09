@@ -195,6 +195,44 @@ class MonsterOverviewPage(QWidget):
         # 底部弹性空间
         self.monster_list_layout.addStretch()
     
+    def show_floating_detail_by_id(self, monster_id: str):
+        """通过ID显示浮动详情"""
+        if not monster_id:
+            return
+            
+        monster = self.monster_db.get_monster_by_id(monster_id)
+        if monster:
+            if self.detail_window is None:
+                self.detail_window = MonsterDetailFloatWindow()
+            self.detail_window.show_floating(monster)
+
+    def show_floating_item_detail_by_id(self, item_id):
+        """显示卡牌/物品详情"""
+        if not item_id:
+            return
+
+        if self.detail_window is None:
+            self.detail_window = MonsterDetailFloatWindow()
+            
+        parent_window = self.window()
+        # Ensure we use show_item_beside which we just added
+        if hasattr(self.detail_window, 'show_item_beside'):
+            self.detail_window.show_item_beside(parent_window, item_id)
+        else:
+            print("Error: MonsterDetailFloatWindow missing show_item_beside")
+    
+    def hide_detail(self):
+        if self.detail_window:
+            self.detail_window.request_hide()
+
+    def reset_detail_window_position(self):
+        """重置悬浮窗位置"""
+        if self.detail_window is None:
+            self.detail_window = MonsterDetailFloatWindow()
+        self.detail_window.reset_position()
+        if self.detail_window.isVisible():
+            self.detail_window.raise_()
+
     def _on_monster_hovered(self, monster: Monster):
         """怪物卡片被悬浮 - 在侧边显示详情"""
         # 第一次悬浮时创建详情窗口

@@ -14,6 +14,85 @@ import os
 import json
 
 
+
+ENCHANT_COLORS: Dict[str, str] = {
+  "黄金": "#f59e0b", # var(--c-gold)
+  "沉重": "#5c7cfa", # var(--c-slow)
+  "寒冰": "#22b8cf", # var(--c-freeze)
+  "疾速": "#00ecc3", # var(--c-haste)
+  "护盾": "#f4cf20", # var(--c-shield)
+  "回复": "#8eea31", # var(--c-heal)
+  "毒素": "#0ebe4f", # var(--c-poison)
+  "炽焰": "#ff9f45", # var(--c-burn)
+  "闪亮": "#98a8fe",
+  "致命": "#f5503d", # var(--c-damage)
+  "辉耀": "#98a8fe",
+  "黑曜石": "#9d4a6f"
+}
+
+ENCHANT_DEFINITIONS = {
+  "Golden": {
+    "name_cn": "黄金",
+    "effect_en": "This has double value.",
+    "effect_cn": "此物品的价值翻倍。"
+  },
+  "Heavy": {
+    "name_cn": "沉重",
+    "effect_en": "Slow 2 items for 3 second(s)",
+    "effect_cn": "减速2件物品3秒"
+  },
+  "Icy": {
+    "name_cn": "寒冰",
+    "effect_en": "Freeze 2 items for 1 second(s)",
+    "effect_cn": "冻结2件物品1秒"
+  },
+  "Turbo": {
+    "name_cn": "疾速",
+    "effect_en": "Haste 2 items for 3 second(s)",
+    "effect_cn": "加速2件物品3秒"
+  },
+  "Shielded": {
+    "name_cn": "护盾",
+    "effect_en": "Shield equal to this item's Damage",
+    "effect_cn": "获得护盾，等量于此物品伤害量"
+  },
+  "Restorative": {
+    "name_cn": "回复",
+    "effect_en": "Heal equal to this item's Damage",
+    "effect_cn": "获得治疗，等量于此物品伤害"
+  },
+  "Toxic": {
+    "name_cn": "毒素",
+    "effect_en": "Poison equal to 10% of this item's Damage",
+    "effect_cn": "造成剧毒，等量于此物品伤害的10%"
+  },
+  "Fiery": {
+    "name_cn": "炽焰",
+    "effect_en": "Burn equal to 10% of this item's Damage",
+    "effect_cn": "造成灼烧，等量于此物品伤害的10%"
+  },
+  "Shiny": {
+    "name_cn": "闪亮",
+    "effect_en": "This has +1 Multicast.",
+    "effect_cn": "此物品+1多重触发。"
+  },
+  "Deadly": {
+    "name_cn": "致命",
+    "effect_en": "This has +50% Crit Chance.",
+    "effect_cn": "此物品+50%暴击率。"
+  },
+  "Radiant": {
+    "name_cn": "辉耀",
+    "effect_en": "This item is immune to Freeze, Slow and Destroy.",
+    "effect_cn": "此物品免疫冻结、减速和摧毁。"
+  },
+  "Obsidian": {
+    "name_cn": "黑曜石",
+    "effect_en": "This has double Damage.",
+    "effect_cn": "此物品的伤害翻倍。"
+  }
+}
+
 class ItemDetailCard(QFrame):
     """
     物品详情卡片（技能或卡牌）
@@ -36,7 +115,7 @@ class ItemDetailCard(QFrame):
         # 初始展开状态（可由调用方覆盖）
         self.is_expanded = False
         self._default_expanded = bool(default_expanded)
-        self.show_all_tiers = False  # 是否显示所有等级
+        self.show_all_tiers = True  # ✅ 默认显示所有等级
         self.enable_tier_click = enable_tier_click  # 是否允许点击详情区域切换等级
         
         # 加载数据（如果提供了item_data则直接使用，否则从数据库加载）
@@ -104,6 +183,8 @@ class ItemDetailCard(QFrame):
         """创建卡片头部 - 参考 .item-card"""
         header = QFrame()
         header.setObjectName("ItemCardHeader")
+        
+        # ✅ 启用点击展开功能
         header.setCursor(Qt.CursorShape.PointingHandCursor)
         header.mousePressEvent = lambda e: self.toggle_expand()
         
@@ -125,14 +206,17 @@ class ItemDetailCard(QFrame):
         if size_class == "small":
             icon_container.setFixedSize(int(icon_size * 0.5), icon_size)
         elif size_class == "large":
-            icon_container.setFixedSize(int(icon_size * 1.5), icon_size)
+            icon_container.setFixedSize(int(icon_size * 2.0), icon_size)
         else:
             icon_container.setFixedSize(icon_size, icon_size)
         
         icon_label = QLabel(icon_container)
         pixmap = self._load_icon(icon_size)
+        
+        # ✅ 使用 fill 样式，拉伸填满（参考React CSS: object-fit: fill）
         icon_label.setPixmap(pixmap)
-        icon_label.setScaledContents(True)
+        icon_label.setScaledContents(True)  # 拉伸填满容器
+        
         icon_label.setGeometry(0, 0, icon_container.width(), icon_container.height())
         
         layout.addWidget(icon_container)
@@ -174,7 +258,26 @@ class ItemDetailCard(QFrame):
         tier_label = QLabel(tier_display)
         tier_label.setObjectName("TierLabel")
         tier_label.setProperty("tier_class", self.current_tier)
-        tier_label.setFixedHeight(int(18 * scale))  # ✅ 固定高度，不随内容变化
+        tier_label.setFixedHeight(int(20 * scale))  # ✅ 稍微增加高度
+        
+        # ✅ 根据品级设置颜色（参考React CSS）
+        tier_colors = {
+            "bronze": ("#cd7f32", "rgba(205, 127, 50, 0.3)"),
+            "silver": ("#c0c0c0", "rgba(192, 192, 192, 0.3)"),
+            "gold": ("#ffd700", "rgba(255, 215, 0, 0.3)"),
+            "diamond": ("#b9f2ff", "rgba(185, 242, 255, 0.3)"),
+            "legendary": ("#ff4500", "rgba(255, 69, 0, 0.25)")
+        }
+        tier_color, tier_border = tier_colors.get(self.current_tier, ("rgba(255, 255, 255, 0.5)", "rgba(255, 255, 255, 0.1)"))
+        tier_label.setStyleSheet(f"""
+             font-size: {int(9 * scale)}pt;
+             font-weight: 800;
+             padding: 1px 4px;
+             border-radius: 3px;
+             background: rgba(255, 255, 255, 0.08);
+             color: {tier_color};
+             border: 1px solid {tier_border}; 
+        """)
         name_layout.addWidget(tier_label)
         name_layout.addStretch()
         
@@ -183,7 +286,7 @@ class ItemDetailCard(QFrame):
         # 标签行（解析 "英文 / 中文 | 英文 / 中文" 格式）
         # ✅ 创建固定高度的标签容器
         tags_container = QWidget()
-        tags_container.setFixedHeight(int(20 * scale))  # 固定高度，不随内容变化
+        tags_container.setFixedHeight(int(24 * scale))  # 稍微增加高度适应内容
         
         tags_layout = QHBoxLayout(tags_container)
         tags_layout.setContentsMargins(0, 0, 0, 0)
@@ -191,6 +294,10 @@ class ItemDetailCard(QFrame):
         
         # 解析tags字符串
         tags_str = self.item_data.get("tags", "")
+        if not tags_str:
+             # Try fallback to type if tags empty
+             tags_str = self.item_data.get("type", "")
+
         tag_pairs = []
         if tags_str:
             # 按 | 分割成多个tag对
@@ -203,6 +310,9 @@ class ItemDetailCard(QFrame):
                         en_tag = parts[0].strip()
                         cn_tag = parts[1].strip()
                         tag_pairs.append((en_tag, cn_tag))
+                else:
+                     # Single val
+                     tag_pairs.append((tag_pair, tag_pair))
         
         # 显示前3个tag（增加到3个）
         for en_tag, cn_tag in tag_pairs[:3]:
@@ -392,36 +502,117 @@ class ItemDetailCard(QFrame):
                     
                     parent_layout.addWidget(passive_label)
         
-        # 3. ✅ 显示附魔效果 (enchantment)
-        enchantment_key = self.item_data.get("enchantment", "")
-        if enchantment_key:
-            enchantments_db = self._get_enchantment_data()
-            if enchantment_key in enchantments_db:
-                enchant_data = enchantments_db[enchantment_key]
-                enchant_effect = enchant_data.get("effect_cn" if lang != "en_US" else "effect_en", "")
-                if lang == "zh_TW":
-                    enchant_effect = self.i18n.to_traditional(enchant_effect)
-                
-                if enchant_effect:
-                    enchant_label = QLabel(f"✨ {enchant_effect}")
-                    enchant_label.setWordWrap(True)
-                    enchant_label.setStyleSheet(f"""
-                        color: #d4b106;
-                        font-size: {int(9 * scale)}pt;
-                        line-height: 1.4;
-                        background: rgba(212, 177, 6, 0.08);
-                        border: 1px solid rgba(212, 177, 6, 0.15);
-                        border-radius: {int(6 * scale)}px;
-                        padding: {int(8 * scale)}px {int(10 * scale)}px;
-                    """)
-                    
-                    # 如果启用了等级点击切换，为附魔框也添加点击事件
-                    if self.enable_tier_click:
-                        enchant_label.setCursor(Qt.CursorShape.PointingHandCursor)
-                        enchant_label.mousePressEvent = lambda event, lbl=enchant_label: self._toggle_tier_display()
-                    
-                    parent_layout.addWidget(enchant_label)
+        # 3. 最后显示附魔效果 (enchantments)
+        self._render_enchantments(parent_layout)
     
+    def _render_enchantments(self, parent_layout):
+        """渲染多个附魔 - 匹配 .item-enchantments-row 样式"""
+        enchantments = self.item_data.get("enchantments", {})
+        if not enchantments:
+             return
+        
+        lang = self.i18n.get_language()
+        scale = self.content_scale
+
+        # 创建容器 .item-enchantments-row
+        container = QFrame()
+        container.setObjectName("EnchantmentsRow")
+        
+        container_layout = QVBoxLayout(container)
+        container_layout.setContentsMargins(0, int(8 * scale), 0, int(8 * scale))
+        container_layout.setSpacing(int(8 * scale))
+        
+        # 顶部边框样式
+        container.setStyleSheet("""
+            #EnchantmentsRow {
+                border-top: 1px solid rgba(255, 255, 255, 0.05);
+                background: transparent;
+            }
+        """)
+
+        # enchantments 是字典: {"Golden": {...}, "Heavy": {...}}
+        for enchant_key, enchant_data in enchantments.items():
+            if not isinstance(enchant_data, dict):
+                continue
+            
+            name_cn = enchant_data.get("name_cn", enchant_key)
+            effect = enchant_data.get("effect_cn" if lang != "en_US" else "effect_en", "")
+            
+            if lang == "zh_TW":
+                name_cn = self.i18n.to_traditional(name_cn)
+                effect = self.i18n.to_traditional(effect)
+            
+            # 特殊处理：沉重、寒冰、疾速的持续时间数值（毫秒转秒）
+            if enchant_key in ["Heavy", "Icy", "Turbo"]:
+                import re
+                def convert_duration(match):
+                    num = int(match.group(1))
+                    if num >= 100:
+                        # 转换为秒，保留1位小数
+                        return f"{num / 1000:.1f}"
+                    return match.group(1)
+                
+                # 替换所有大于等于100的数字
+                effect = re.sub(r'\+?(\d+)', convert_duration, effect)
+            
+            # 颜色处理
+            hex_color = ENCHANT_COLORS.get(name_cn, "#98a8fe")
+            
+            # Calculate RGBA for background (12%) and border (30%)
+            hc = hex_color.lstrip('#')
+            if len(hc) == 3: hc = "".join([c*2 for c in hc])
+            r, g, b = int(hc[0:2], 16), int(hc[2:4], 16), int(hc[4:6], 16)
+            bg_color = f"rgba({r}, {g}, {b}, 0.12)"
+            border_color = f"rgba({r}, {g}, {b}, 0.3)"
+            text_color = hex_color
+
+            # 创建行 .enchant-item (flex row)
+            row_widget = QWidget()
+            row_layout = QHBoxLayout(row_widget)
+            row_layout.setContentsMargins(0, 0, 0, 0)
+            row_layout.setSpacing(int(8 * scale))
+            
+            # 徽章 .enchant-badge
+            badge = QLabel(name_cn)
+            badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            badge.setStyleSheet(f"""
+                color: {text_color};
+                background-color: {bg_color};
+                border: 1px solid {border_color};
+                border-radius: {int(4 * scale)}px;
+                padding: {int(1 * scale)}px {int(4 * scale)}px;
+                font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
+                font-weight: bold;
+                font-size: {int(9 * scale)}pt;
+                min-width: {int(52 * scale)}px;
+            """)
+            
+            # 效果文本 .enchant-effect
+            effect_label = QLabel(effect)
+            effect_label.setWordWrap(True)
+            effect_label.setStyleSheet(f"""
+                color: #ddd;
+                font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
+                font-size: {int(10 * scale)}pt;
+                line-height: 1.4;
+                border: none;
+                background: transparent;
+            """)
+            
+            row_layout.addWidget(badge)
+            row_layout.addWidget(effect_label, 1) # Stretch factor 1
+            
+            # Disable click events for enchantments as requested
+            # if self.enable_tier_click:
+            #     badge.setCursor(Qt.CursorShape.PointingHandCursor)
+            #     effect_label.setCursor(Qt.CursorShape.PointingHandCursor)
+            #     badge.mousePressEvent = lambda event, lbl=badge: self._toggle_tier_display()
+            #     effect_label.mousePressEvent = lambda event, lbl=effect_label: self._toggle_tier_display()
+
+            container_layout.addWidget(row_widget)
+            
+        parent_layout.addWidget(container)
+
     def _process_tier_values(self, text: str) -> str:
         """
         处理文本中的等级数值显示
@@ -583,14 +774,14 @@ class ItemDetailCard(QFrame):
                 border-top: 1px solid rgba(255, 255, 255, 0.03);
                 background: rgba(0, 0, 0, 0.12);
             }}
-            /* ✅ 标签样式 - 紧凑扁平设计 */
+            /* ✅ 标签样式 - 参考React CSS */
             QLabel#TagBadge {{
-                color: #8b9cff;
-                background: rgba(122, 143, 255, 0.12);
-                padding: 2px 6px;
-                border-radius: 3px;
-                font-size: 8pt;
-                font-weight: 500;
+                font-size: {int(12 * self.content_scale)}pt;
+                color: #98a8fe;
+                background: rgba(152, 168, 254, 0.15);
+                padding: 0px {int(6 * self.content_scale)}px;
+                border-radius: 10px;
+                border: 1px solid rgba(152, 168, 254, 0.3);
             }}
         """)
     

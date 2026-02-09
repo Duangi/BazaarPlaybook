@@ -3,6 +3,7 @@ import cv2
 import pickle
 import json
 import time
+import numpy as np
 from loguru import logger
 import config
 
@@ -15,6 +16,7 @@ class FeatureMatcher:
         
         # 恢复按形状分类的子库
         self.static_lib = {'Large': {}, 'Medium': {}, 'Small': {}}
+        self.monster_lib = {} # 怪物特征库
         self.user_memory = {} 
         
         os.makedirs(config.CACHE_DIR, exist_ok=True)
@@ -23,7 +25,7 @@ class FeatureMatcher:
     def _load_all_libraries(self):
         logger.info("FeatureMatcher: 正在加载特征数据库...")
         
-        # 1. 加载静态库
+        # 1. 加载静态库 (Items)
         if os.path.exists(config.STATIC_LIB_FILE):
             try:
                 with open(config.STATIC_LIB_FILE, "rb") as f:
@@ -37,16 +39,27 @@ class FeatureMatcher:
                     l_count = len(self.static_lib['Large'])
                     m_count = len(self.static_lib['Medium'])
                     s_count = len(self.static_lib['Small'])
-                    logger.success(f"FeatureMatcher: 静态库加载成功 (L:{l_count}, M:{m_count}, S:{s_count})")
-                return
+                    logger.success(f"FeatureMatcher: Item特征库加载成功 (L:{l_count}, M:{m_count}, S:{s_count})")
             except Exception as e:
                 logger.error(f"FeatureMatcher: 加载静态特征库失败: {e}")
+                self._build_static_library()
         else:
             logger.info("FeatureMatcher: 静态库不存在，开始初次构建...")
-            
-        self._build_static_library()
+            self._build_static_library()
 
-        # 2. 加载用户记忆库
+        # 2. 加载怪物库 (Monsters)
+        if os.path.exists(config.MONSTER_LIB_FILE):
+             try:
+                with open(config.MONSTER_LIB_FILE, "rb") as f:
+                    self.monster_lib = pickle.load(f)
+                logger.success(f"FeatureMatcher: Monster特征库加载成功 ({len(self.monster_lib)} monsters)")
+             except Exception as e:
+                logger.error(f"FeatureMatcher: 加载怪物特征库失败: {e}")
+                self._build_monster_library()
+        else:
+             self._build_monster_library()
+
+        # 3. 加载用户记忆库
         if os.path.exists(config.USER_MEMORY_FILE):
             try: 
                 with open(config.USER_MEMORY_FILE, "rb") as f: 
@@ -71,18 +84,18 @@ class FeatureMatcher:
         process_count = 0
         for item in db:
             item_id = item.get('id', '').strip()
-            size_cat = item.get('size', '').split('/')[0].strip()
+            size_cat = item.get('size', '').split('/')[0].strip() # 'Small' / 'Medium' / 'Large'
             
             path = self._find_img_path(item_id)
             if not path or size_cat not in self.static_lib: 
                 continue
             
-            img_gray = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
-            if img_gray is None: 
+            img = cv2.imdecode(np.fromfile(path, dtype=np.uint8), cv2.IMREAD_GRAYSCALE)
+            if img is None: 
                 logger.warning(f"FeatureMatcher: 无法加载图片 -> {path}")
                 continue
 
-            kp, des = self.orb.detectAndCompute(img_gray, None)
+            kp, des = self.orb.detectAndCompute(img, None)
             if des is not None:
                 self.static_lib[size_cat][item_id] = {
                     'orb_des': des, 
@@ -95,6 +108,40 @@ class FeatureMatcher:
             
         cost = time.perf_counter() - start_time
         logger.success(f"FeatureMatcher: 特征库构建完成! 处理了 {process_count} 张卡牌，耗时: {cost:.2f}s")
+    
+    def _build_monster_library(self):
+        """构建怪物特征库"""
+        start_time = time.perf_counter()
+        logger.info("FeatureMatcher: 开始构建怪物特征库...")
+        self.monster_lib = {}
+        
+        if not os.path.exists(config.MONSTER_CHAR_DIR):
+            logger.error(f"FeatureMatcher: 怪物图片目录不存在: {config.MONSTER_CHAR_DIR}")
+            return
+
+        count = 0
+        
+        for filename in os.listdir(config.MONSTER_CHAR_DIR):
+            if filename.lower().endswith(('.webp', '.png', '.jpg')):
+                path = os.path.join(config.MONSTER_CHAR_DIR, filename)
+                name_id = os.path.splitext(filename)[0] # 文件名作为ID
+                
+                # 能够读取中文路径
+                img = cv2.imdecode(np.fromfile(path, dtype=np.uint8), cv2.IMREAD_GRAYSCALE)
+                if img is None: continue
+                
+                kp, des = self.orb.detectAndCompute(img, None)
+                if des is not None:
+                    self.monster_lib[name_id] = {
+                        'orb_des': des,
+                        'kp_count': len(kp)
+                    }
+                    count += 1
+        
+        with open(config.MONSTER_LIB_FILE, "wb") as f:
+            pickle.dump(self.monster_lib, f)
+            
+        logger.success(f"FeatureMatcher: 怪物库构建完成 ({count} units), 耗时: {time.perf_counter()-start_time:.2f}s")
 
     def _find_img_path(self, item_id):
         for ext in ['.png', '.jpg', '.webp']:
@@ -102,6 +149,40 @@ class FeatureMatcher:
             if os.path.exists(p): 
                 return p
         return None
+
+    def match_monster_character(self, target_img):
+        """匹配怪物角色图片"""
+        match_start = time.perf_counter()
+        
+        target_gray = cv2.cvtColor(target_img, cv2.COLOR_BGR2GRAY)
+        t_kp, t_des = self.orb.detectAndCompute(target_gray, None)
+        num_target_kp = len(t_kp) if t_kp else 0
+        
+        if t_des is None or num_target_kp == 0:
+            return []
+
+        final_res = []
+        for name, static_data in self.monster_lib.items():
+            matches = self.bf.knnMatch(t_des, static_data['orb_des'], k=2)
+            good = 0
+            for m_n in matches:
+                if len(m_n) == 2:
+                    m, n = m_n
+                    if m.distance < config.ORB_RATIO * n.distance:
+                        good += 1
+            
+            denom = max(1, min(num_target_kp, static_data['kp_count']))
+            score = float(good) / denom
+            if score >= config.ORB_MATCH_THRESHOLD:
+               final_res.append((name, score))
+
+        sorted_res = sorted(final_res, key=lambda x: x[1], reverse=True)[:1]
+        
+        # Log (optional, avoid spam if called per frame)
+        # if sorted_res:
+        #    logger.debug(f"Monster Match: {sorted_res[0]}")
+
+        return sorted_res
 
     def match(self, target_img, size_cat):
         """ 

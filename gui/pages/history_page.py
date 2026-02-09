@@ -8,7 +8,6 @@ from PySide6.QtGui import QCursor
 import json
 from pathlib import Path
 
-from gui.widgets.match_history_widgets import MatchListItem
 from services.log_analyzer import LogAnalyzer
 
 
@@ -66,6 +65,18 @@ class HistoryPage(QWidget):
             QScrollArea {
                 border: none;
                 background-color: transparent;
+            }
+            QScrollBar:vertical {
+                background: rgba(0, 0, 0, 0.2);
+                width: 12px;
+                border-radius: 6px;
+            }
+            QScrollBar::handle:vertical {
+                background: rgba(255, 205, 25, 0.3);
+                border-radius: 6px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: rgba(255, 205, 25, 0.5);
             }
         """)
         
@@ -129,7 +140,7 @@ class HistoryPage(QWidget):
         return header
     
     def _load_matches(self):
-        """加载对局列表 - 从日志分析器获取真实数据"""
+        """加载对局列表 - 简化版，只显示结果和天数"""
         # 清空现有列表
         while self.matches_layout.count():
             item = self.matches_layout.takeAt(0)
@@ -154,11 +165,9 @@ class HistoryPage(QWidget):
                 """)
                 self.matches_layout.addWidget(empty_label)
             else:
-                # 创建对局卡片 - 倒序显示（最新的在上面）
+                # 创建简化的对局卡片 - 倒序显示（最新的在上面）
                 for session in reversed(sessions):
-                    # 转换session数据为match_data格式
-                    match_data = self._convert_session_to_match(session)
-                    match_item = MatchListItem(match_data, self.items_db)
+                    match_item = self._create_simple_match_card(session)
                     self.matches_layout.addWidget(match_item)
         except Exception as e:
             print(f"加载对局数据失败: {e}")
@@ -179,19 +188,112 @@ class HistoryPage(QWidget):
         # 添加弹簧
         self.matches_layout.addStretch()
     
-    def _convert_session_to_match(self, session) -> dict:
-        """将GameSession转换为match_data格式"""
-        return {
-            "match_id": f"session_{id(session)}",  # 使用session对象的id作为唯一标识
-            "hero": session.hero if session.hero else "Unknown",  # 使用session中的英雄名称
-            "start_time": session.start_time or "",
-            "end_time": session.end_time or "",
-            "days": session.days,
-            "victory": session.victory,
-            "is_finished": session.is_finished,
-            "created_at": session.start_time or "",
-            "pvp_battles": session.pvp_battles  # 直接使用session中的pvp_battles列表
-        }
+    def _create_simple_match_card(self, session) -> QWidget:
+        """创建简化的对局卡片 - 只显示结果和天数"""
+        card = QWidget()
+        card.setFixedHeight(80)
+        
+        # 确定结果状态
+        result_icon = "🏆" if session.victory else "💀"
+        result_text = "胜利" if session.victory else "失败"
+        result_color = "#4CAF50" if session.victory else "#f44336"
+        
+        # 主布局
+        card_layout = QHBoxLayout(card)
+        card_layout.setContentsMargins(20, 15, 20, 15)
+        card_layout.setSpacing(20)
+        
+        # 左侧：结果图标和文字
+        result_widget = QWidget()
+        result_layout = QVBoxLayout(result_widget)
+        result_layout.setContentsMargins(0, 0, 0, 0)
+        result_layout.setSpacing(5)
+        
+        icon_label = QLabel(result_icon)
+        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        icon_label.setStyleSheet(f"""
+            QLabel {{
+                font-size: 32px;
+            }}
+        """)
+        result_layout.addWidget(icon_label)
+        
+        status_label = QLabel(result_text)
+        status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        status_label.setStyleSheet(f"""
+            QLabel {{
+                font-size: 14px;
+                font-weight: bold;
+                color: {result_color};
+            }}
+        """)
+        result_layout.addWidget(status_label)
+        
+        card_layout.addWidget(result_widget)
+        
+        # 中间：分隔线
+        separator = QLabel()
+        separator.setFixedWidth(2)
+        separator.setStyleSheet("background-color: rgba(255, 255, 255, 0.1);")
+        card_layout.addWidget(separator)
+        
+        # 右侧：天数和时间信息
+        info_widget = QWidget()
+        info_layout = QVBoxLayout(info_widget)
+        info_layout.setContentsMargins(0, 0, 0, 0)
+        info_layout.setSpacing(8)
+        
+        # 天数
+        days_label = QLabel(f"存活天数: {session.days}")
+        days_label.setStyleSheet("""
+            QLabel {
+                font-size: 16px;
+                font-weight: bold;
+                color: #ffcd19;
+            }
+        """)
+        info_layout.addWidget(days_label)
+        
+        # 时间（如果有）
+        if session.start_time:
+            time_label = QLabel(f"开始时间: {session.start_time}")
+            time_label.setStyleSheet("""
+                QLabel {
+                    font-size: 12px;
+                    color: #888888;
+                }
+            """)
+            info_layout.addWidget(time_label)
+        
+        # 英雄（如果有）
+        if session.hero:
+            hero_label = QLabel(f"英雄: {session.hero}")
+            hero_label.setStyleSheet("""
+                QLabel {
+                    font-size: 12px;
+                    color: #888888;
+                }
+            """)
+            info_layout.addWidget(hero_label)
+        
+        card_layout.addWidget(info_widget)
+        card_layout.addStretch()
+        
+        # 卡片样式
+        card.setStyleSheet(f"""
+            QWidget {{
+                background-color: rgba(50, 45, 40, 0.6);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                border-left: 4px solid {result_color};
+                border-radius: 8px;
+            }}
+            QWidget:hover {{
+                background-color: rgba(70, 60, 50, 0.7);
+                border-color: rgba(255, 255, 255, 0.2);
+            }}
+        """)
+        
+        return card
     
     def refresh(self):
         """刷新页面"""

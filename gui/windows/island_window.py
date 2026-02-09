@@ -47,6 +47,18 @@ class IslandWindow(QWidget):
         # 动画
         self._setup_animations()
         
+    def set_scanner_status(self, is_active: bool, message: str = ""):
+        """设置扫描器状态"""
+        if is_active:
+            self.lbl_day.setText("Auto Scan: ON")
+            self.lbl_day.setStyleSheet("color: #00ff00; font-weight: bold;") # Green
+        else:
+            self.lbl_day.setText("Auto Scan: OFF")
+            self.lbl_day.setStyleSheet("color: #888888;")
+            
+        if message:
+             self.lbl_phase.setText(message)
+
     def _setup_ui(self):
         """设置UI"""
         layout = QHBoxLayout(self)
@@ -183,6 +195,55 @@ class IslandWindow(QWidget):
         if event.button() == Qt.LeftButton:
             self.expand_requested.emit()
             
+    def show_detection_feedback(self, text: str):
+        """Show detection feedback (Flash green + Text)"""
+        if not text: return
+        
+        # Format Text
+        self.lbl_phase.setText(f"Found: {text}")
+        
+        # Flash Green Style
+        self.lbl_phase.setStyleSheet("""
+            QLabel#IslandPhase {
+                color: #00ff00;
+                font-size: 13px;
+                font-weight: bold;
+                font-family: 'Microsoft YaHei UI', 'Segoe UI';
+            }
+        """)
+        
+        # Flash Animation (Opacity pulse)
+        if not hasattr(self, '_flash_anim'):
+            self._flash_anim = QPropertyAnimation(self, b"windowOpacity")
+            self._flash_anim.setDuration(150)
+            self._flash_anim.setLoopCount(2)
+            self._flash_anim.setKeyValueAt(0, 1.0)
+            self._flash_anim.setKeyValueAt(0.5, 0.7)
+            self._flash_anim.setKeyValueAt(1, 1.0)
+        
+        self._flash_anim.start()
+
+        # Auto Restore
+        if hasattr(self, '_restore_timer'):
+             self._restore_timer.stop()
+        
+        from PySide6.QtCore import QTimer
+        self._restore_timer = QTimer(self)
+        self._restore_timer.setSingleShot(True)
+        self._restore_timer.timeout.connect(self._restore_phase_text)
+        self._restore_timer.start(2000)
+
+    def _restore_phase_text(self):
+        if hasattr(self, 'lbl_phase'):
+            self.lbl_phase.setText("Phase: Shop")
+            self.lbl_phase.setStyleSheet("""
+                QLabel#IslandPhase {
+                    color: rgba(255, 204, 0, 0.8);
+                    font-size: 12px;
+                    font-family: 'Microsoft YaHei UI', 'Segoe UI';
+                }
+            """)
+
     def _magnetic_snap(self):
         """磁吸到屏幕顶部中央"""
         from PySide6.QtGui import QGuiApplication

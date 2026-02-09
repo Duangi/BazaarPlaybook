@@ -118,6 +118,18 @@ class MonsterDatabase:
                 return monster
         return None
 
+    def get_monster_by_id(self, monster_id: str) -> Optional[Monster]:
+        """根据ID查找怪物 (目前ID就是name_en或者name_zh)"""
+        # FeatureMatcher returns name/id. Our monsters are indexed by name in this loader.
+        # Try exact match on 'name_key' or searches
+        for monster in self.monsters:
+            # Check name_key which often is the unique ID in our simplified system
+            if monster.name_key == monster_id:
+                return monster
+            if monster.name_zh == monster_id or monster.name_en == monster_id:
+                return monster
+        return None
+
 
 # 全局单例
 _monster_db = None

@@ -10,6 +10,7 @@ from utils.icon_helper import create_colored_svg_icon
 from gui.pages.monster_overview_page import MonsterOverviewPage
 from gui.pages.settings_page import SettingsPage
 from gui.pages.history_page import HistoryPage
+from gui.pages.encyclopedia_page import EncyclopediaPage
 from utils.i18n import get_i18n
 
 class SidebarWindow(QWidget):
@@ -34,9 +35,10 @@ class SidebarWindow(QWidget):
         self.setMaximumSize(800, 1200)
         
         # ✅ 启用完整的拖拽和8方向调整大小功能
+        # 增加边缘检测范围，避免与滚动条冲突
         self.frameless_helper = FramelessHelper(
             self, 
-            margin=5,           # 边缘检测区域 5px（更精确的边缘检测）
+            margin=8,           # 边缘检测区域调整为8px
             snap_to_top=True,   # 启用顶部吸附
             enable_drag=True,   # 启用拖拽
             enable_resize=True, # ✅ 启用8方向调整大小
@@ -225,11 +227,9 @@ class SidebarWindow(QWidget):
         items_placeholder.setStyleSheet("color: #888; font-size: 16pt;")
         self.content_stack.addWidget(items_placeholder)
         
-        # 4. 百科搜索页面 (占位)
-        search_placeholder = QLabel("百科搜索 - 待实现")
-        search_placeholder.setAlignment(Qt.AlignCenter)
-        search_placeholder.setStyleSheet("color: #888; font-size: 16pt;")
-        self.content_stack.addWidget(search_placeholder)
+        # 4. 百科搜索页面
+        self.encyclopedia_page = EncyclopediaPage()
+        self.content_stack.addWidget(self.encyclopedia_page)
         
         # 5. 历史战绩页面
         self.history_page = HistoryPage()
