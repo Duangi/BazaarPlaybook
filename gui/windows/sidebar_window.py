@@ -1,8 +1,9 @@
 import sys
 import os
+import json
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
                              QPushButton, QFrame, QStackedWidget, QButtonGroup)
-from PySide6.QtCore import Qt, QPoint, QPropertyAnimation, QEasingCurve, Signal, QSize, QSettings, QRect
+from PySide6.QtCore import Qt, QPoint, QPropertyAnimation, QEasingCurve, Signal, QSize, QSettings, QRect, QTimer
 from PySide6.QtGui import QIcon
 import gui.styles as styles
 from gui.utils.frameless_helper import FramelessHelper
@@ -12,6 +13,7 @@ from gui.pages.settings_page import SettingsPage
 from gui.pages.history_page import HistoryPage
 from gui.pages.encyclopedia_page import EncyclopediaPage
 from utils.i18n import get_i18n
+from loguru import logger
 
 class SidebarWindow(QWidget):
     collapse_to_island = Signal()  # 收起到灵动岛信号
@@ -21,11 +23,29 @@ class SidebarWindow(QWidget):
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
         
-        # ✅ 用于记住窗口位置和大小
-        self.settings = QSettings("Reborn", "SidebarWindow")
+        # ✅ 窗口位置配置文件路径
+        self.config_file = os.path.join("user_data", "sidebar_window.json")
+        os.makedirs("user_data", exist_ok=True)
         
         # ✅ 收起状态标记
         self.is_auto_collapsed = False  # 是否处于收起状态
+        
+        # ✅ 鼠标离开延迟定时器（用于自动收起）
+        self.leave_timer = QTimer()
+        self.leave_timer.setSingleShot(True)
+        self.leave_timer.timeout.connect(self._check_auto_collapse)
+        self.leave_delay = 500  # 500ms延迟
+        
+        # ✅ 保存位置的防抖定时器
+        self.save_timer = QTimer()
+        self.save_timer.setSingleShot(True)
+        self.save_timer.setInterval(300)  # 300ms 防抖
+        self.save_timer.timeout.connect(self._save_window_geometry_now)
+
+        # 防抖/频率限制辅助
+        self._save_pending = False
+        self._last_saved_time = 0.0
+        self._min_save_interval = 2.0  # seconds, 不要在短时间内频繁写磁盘
         
         # ✅ 防止缩放时抖动
         self._is_scaling = False
@@ -89,13 +109,8 @@ class SidebarWindow(QWidget):
         title_label.setObjectName("AppTitle")
         title_layout.addWidget(title_label)
         
-        # ✅ 收起按钮（扩展到整个中间区域）
-        self.collapse_btn = QPushButton("▲")  # 向上箭头表示收起到顶部
-        self.collapse_btn.setObjectName("CollapseBtn")
-        self.collapse_btn.setCursor(Qt.PointingHandCursor)
-        self.collapse_btn.setToolTip("收起到顶部边缘")
-        self.collapse_btn.clicked.connect(self._on_collapse_clicked)
-        title_layout.addWidget(self.collapse_btn, 1)  # 设置权重为1，占据剩余空间
+        # ✅ 删除收起按钮，改为自动收起
+        title_layout.addStretch(1)  # 占据剩余空间
         
         # 语言切换按钮（可选）
         self.lang_btn = QPushButton("🌐 简中")
@@ -406,14 +421,19 @@ class SidebarWindow(QWidget):
     
     def moveEvent(self, event):
         """
-        ✅ 窗口移动时保存位置
+        ✅ 窗口移动时保存位置（使用防抖）
         """
         super().moveEvent(event)
         
-        # 保存窗口几何信息（只在窗口可见时）
+        # 每次移动时启动防抖定时器（不产生日志）
         if self.isVisible():
             self._save_window_geometry()
-    
+
+    def closeEvent(self, event):
+        """窗口关闭时立即保存位置"""
+        self._save_window_geometry_now()
+        super().closeEvent(event)
+
     def _on_lang_clicked(self):
         """语言切换按钮点击"""
         current_lang = self.i18n.get_language()
@@ -477,21 +497,51 @@ class SidebarWindow(QWidget):
         # 更新所有页面的语言
         if hasattr(self, 'monster_page'):
             self.monster_page.update_language()
+        if hasattr(self, 'encyclopedia_page'):
+            self.encyclopedia_page.update_language()
         
         print(f"[Settings] Language changed to {lang_code}")
     
-    def _on_collapse_clicked(self):
-        """顶部收起按钮点击 - 切换收起/展开状态"""
+    def enterEvent(self, event):
+        """鼠标进入窗口"""
+        # 取消延迟收起
+        self.leave_timer.stop()
+        
+        # 如果已收起，展开窗口
         if self.is_auto_collapsed:
-            # 当前是收起状态，点击展开
             self._trigger_auto_expand()
-            self.collapse_btn.setText("▲")
-            self.collapse_btn.setToolTip("收起到顶部边缘")
-        else:
-            # 当前是展开状态，点击收起
+        
+        super().enterEvent(event)
+    
+    def leaveEvent(self, event):
+        """鼠标离开窗口"""
+        # 启动延迟检查
+        self.leave_timer.start(self.leave_delay)
+        super().leaveEvent(event)
+    
+    def _check_auto_collapse(self):
+        """检查是否应该自动收起"""
+        # 检查详情窗口是否显示且鼠标在其上
+        if hasattr(self, 'monster_page') and self.monster_page.detail_window:
+            detail_win = self.monster_page.detail_window
+            if detail_win.isVisible():
+                # 检查鼠标是否在详情窗口上
+                from PySide6.QtGui import QCursor
+                cursor_pos = QCursor.pos()
+                if detail_win.geometry().contains(cursor_pos):
+                    # 鼠标在详情窗口上，不收起
+                    return
+        
+        # 只有当窗口在屏幕最上方时才自动收起
+        if self._is_at_screen_top():
             self._trigger_auto_collapse()
-            self.collapse_btn.setText("▼")
-            self.collapse_btn.setToolTip("展开窗口")
+    
+    def _is_at_screen_top(self):
+        """检查窗口是否在屏幕最上方"""
+        from PySide6.QtWidgets import QApplication
+        screen = QApplication.primaryScreen().availableGeometry()
+        # 如果窗口顶部在屏幕顶部附近（10px以内），认为是在顶部
+        return self.y() <= screen.y() + 10
     
     def _trigger_auto_collapse(self):
         """触发收起动画 - 向上收起到屏幕顶部"""
@@ -529,10 +579,6 @@ class SidebarWindow(QWidget):
         
         # 保存收起前的几何信息
         self._pre_collapse_geometry = QRect(current_pos, current_size)
-        
-        # 更新收起按钮
-        self.collapse_btn.setText("▼")
-        self.collapse_btn.setToolTip("展开窗口")
     
     def _trigger_auto_expand(self):
         """触发展开动画 - 从顶部展开"""
@@ -550,22 +596,6 @@ class SidebarWindow(QWidget):
         
         # 取消收起状态
         self.is_auto_collapsed = False
-        
-        # 更新收起按钮
-        self.collapse_btn.setText("▲")
-        self.collapse_btn.setToolTip("收起到顶部边缘")
-    
-    def enterEvent(self, event):
-        """鼠标进入窗口"""
-        super().enterEvent(event)
-        
-        # 如果处于收起状态，自动展开
-        if self.is_auto_collapsed:
-            self._trigger_auto_expand()
-    
-    def leaveEvent(self, event):
-        """鼠标离开窗口"""
-        super().leaveEvent(event)
     
     def _position_to_right(self):
         """测试用：将窗口移动到屏幕右侧"""
@@ -577,40 +607,108 @@ class SidebarWindow(QWidget):
         """加载保存的窗口位置和大小"""
         from PySide6.QtWidgets import QApplication
         
-        # 加载大小
-        width = self.settings.value("window_width", 500, type=int)
-        height = self.settings.value("window_height", 700, type=int)
-        
-        # 确保在合理范围内
-        width = max(self.minimumWidth(), min(self.maximumWidth(), width))
-        height = max(self.minimumHeight(), min(self.maximumHeight(), height))
-        
-        self.resize(width, height)
-        
-        # 加载位置
-        has_pos = self.settings.value("has_position", False, type=bool)
-        if has_pos:
-            x = self.settings.value("window_x", -1, type=int)
-            y = self.settings.value("window_y", -1, type=int)
-            
-            if x >= 0 and y >= 0:
-                # 验证位置是否在有效屏幕范围内
-                screen = QApplication.primaryScreen().availableGeometry()
-                if (x >= screen.left() and x + width <= screen.right() + 100 and
-                    y >= screen.top() and y + height <= screen.bottom() + 100):
-                    self.move(x, y)
-                    return
+        # 尝试从 JSON 文件加载
+        try:
+            if os.path.exists(self.config_file):
+                with open(self.config_file, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+                logger.debug(f"Loaded sidebar config: {config}")
+                    
+                width = config.get("window_width", 500)
+                height = config.get("window_height", 700)
+                
+                # 确保在合理范围内
+                width = max(self.minimumWidth(), min(self.maximumWidth(), width))
+                height = max(self.minimumHeight(), min(self.maximumHeight(), height))
+                
+                self.resize(width, height)
+                
+                # 加载位置
+                has_pos = config.get("has_position", False)
+                if has_pos:
+                    x = config.get("window_x", -1)
+                    y = config.get("window_y", -1)
+                    logger.debug(f"Attempting to restore position x={x}, y={y}, width={width}, height={height}")
+                    
+                    if x >= 0 and y >= 0:
+                        # 验证位置是否在任意屏幕范围内
+                        screens = QApplication.screens()
+                        found = False
+                        for s in screens:
+                            screen = s.availableGeometry()
+                            logger.debug(f"Checking screen: left={screen.left()}, top={screen.top()}, right={screen.right()}, bottom={screen.bottom()}")
+                            if (x >= screen.left() and x + width <= screen.right() + 100 and
+                                y >= screen.top() and y + height <= screen.bottom() + 100):
+                                logger.debug(f"Restoring sidebar geometry to ({x},{y},{width},{height}) on screen")
+                                self.move(x, y)
+                                found = True
+                                break
+                        if found:
+                            return
+                        else:
+                            logger.debug("Saved position does not fit any screen bounds, falling back to default position")
+        except Exception as e:
+            logger.debug(f"加载窗口配置失败: {e}")
         
         # 如果没有保存的位置或位置无效，使用默认位置（右侧）
+        self.resize(500, 700)
         self._position_to_right()
-    
+
     def _save_window_geometry(self):
-        """保存当前窗口位置和大小"""
-        self.settings.setValue("window_width", self.width())
-        self.settings.setValue("window_height", self.height())
-        self.settings.setValue("window_x", self.x())
-        self.settings.setValue("window_y", self.y())
-        self.settings.setValue("has_position", True)
+        """保存当前窗口位置和大小（防抖）
+        改动：只排队保存，不产生日志，实际写入时再记录。
+        """
+        # 不在自动收起动画过程中保存（避免负y坐标等脏数据）
+        if getattr(self, 'is_auto_collapsed', False) and getattr(self, '_pre_collapse_geometry', None) is None:
+            # 如果已经收起但没有 pre-collapse 数据，跳过
+            return
+
+        # 如果已经有保存任务在排队，则只重启定时器
+        if self._save_pending:
+            self.save_timer.start()
+            return
+
+        # 标记为待保存并启动定时器（不产生日志）
+        self._save_pending = True
+        self.save_timer.start()
+
+    def _save_window_geometry_now(self):
+        """立即保存当前窗口位置和大小到 JSON 文件（实际写入）"""
+        try:
+            import time
+            now = time.time()
+            # 重置 pending 标记
+            self._save_pending = False
+
+            # 限制最小保存间隔，防止动画抖动或连续操作频繁写盘
+            if now - getattr(self, '_last_saved_time', 0.0) < getattr(self, '_min_save_interval', 2.0):
+                logger.debug(f"Skipping save due to min interval. last_saved={self._last_saved_time}, now={now}")
+                return
+
+            # 如果处于自动收起状态，优先保存收起前的位置
+            if getattr(self, 'is_auto_collapsed', False) and hasattr(self, '_pre_collapse_geometry'):
+                geom = self._pre_collapse_geometry
+                x, y, w, h = geom.x(), geom.y(), geom.width(), geom.height()
+                logger.debug(f"Saving pre-collapse geometry: x={x}, y={y}, w={w}, h={h}")
+            else:
+                x, y, w, h = self.x(), self.y(), self.width(), self.height()
+                logger.debug(f"Saving current geometry: x={x}, y={y}, w={w}, h={h}")
+
+            # 设置最后保存时间，避免并发/重复写入
+            self._last_saved_time = now
+
+            config = {
+                "window_width": w,
+                "window_height": h,
+                "window_x": x,
+                "window_y": y,
+                "has_position": True
+            }
+            with open(self.config_file, 'w', encoding='utf-8') as f:
+                json.dump(config, f, indent=2, ensure_ascii=False)
+            logger.debug(f"Sidebar geometry saved to {self.config_file}: {config}")
+        except Exception as e:
+            logger.debug(f"保存窗口配置失败: {e}")
     
 # 运行测试
 if __name__ == "__main__":

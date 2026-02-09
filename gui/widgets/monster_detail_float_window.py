@@ -10,7 +10,7 @@ from PySide6.QtGui import QPixmap
 from data_manager.monster_loader import Monster
 from utils.i18n import get_i18n
 from utils.image_loader import ImageLoader, CardSize
-from gui.widgets.item_detail_card import ItemDetailCard
+from gui.widgets.item_detail_card_v2 import ItemDetailCard
 from gui.styles import SCROLLBAR_STYLE
 from gui.utils.frameless_helper import FramelessHelper
 
@@ -40,6 +40,10 @@ class MonsterDetailFloatWindow(QWidget):
         self.i18n = get_i18n()
         # track a single active item popup to avoid overlapping popups
         self._active_item_popup = None
+        
+        # ✅ 加载数据库
+        self.items_db = self._load_items_db()
+        self.skills_db = self._load_skills_db()
         
         # 用于记住窗口大小和内容缩放比例
         self.settings = QSettings("Reborn", "MonsterDetailWindow")
@@ -358,9 +362,12 @@ class MonsterDetailFloatWindow(QWidget):
 
         if self.display_mode == 'item' and self.current_item_id:
              scale = self.content_scale
-             # Create ItemDetailCard
+             # ✅ 从数据库中查找物品数据
+             item_data = next((item for item in self.items_db if item.get("id") == self.current_item_id), {})
+             # Create ItemDetailCard with item_data
              item_card = ItemDetailCard(item_id=self.current_item_id, item_type="item",
-                                        default_expanded=True, enable_tier_click=True, content_scale=scale)
+                                        default_expanded=True, enable_tier_click=True, content_scale=scale,
+                                        item_data=item_data)
              self.content_layout.addWidget(item_card)
              return
 
@@ -420,9 +427,12 @@ class MonsterDetailFloatWindow(QWidget):
             for skill in m.skills:
                 skill_id = skill.get("id", "")
                 current_tier = skill.get("current_tier", "bronze").lower()  # ✅ 转换为小写确保匹配
-                # ✅ 启用点击切换等级功能，并传入缩放比例
+                # ✅ 从数据库中查找技能数据
+                skill_data = next((s for s in self.skills_db if s.get("id") == skill_id), {})
+                # ✅ 启用点击切换等级功能，并传入缩放比例和数据
                 skill_card = ItemDetailCard(skill_id, item_type="skill", current_tier=current_tier, 
-                                           default_expanded=True, enable_tier_click=True, content_scale=scale)
+                                           default_expanded=True, enable_tier_click=True, content_scale=scale,
+                                           item_data=skill_data)
                 self.content_layout.addWidget(skill_card)
 
         # 3. 掉落物品（水平紧凑图标条）
@@ -553,7 +563,7 @@ class MonsterDetailFloatWindow(QWidget):
                         # 强制应用样式到顶层弹窗
                         try:
                             self._popup.setAttribute(Qt.WA_StyledBackground, True)
-                            self._popup._setup_style()
+                            self._popup._update_style()
                             self._popup.style().unpolish(self._popup)
                             self._popup.style().polish(self._popup)
                         except Exception as e:
@@ -792,3 +802,29 @@ class MonsterDetailFloatWindow(QWidget):
         """应用内容缩放比例"""
         # 更新所有内容的字体大小
         self._update_content()
+    
+    def _load_items_db(self):
+        """加载物品数据库"""
+        try:
+            import json
+            with open("assets/json/items_db.json", "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"加载物品数据库失败: {e}")
+            return []
+    
+    def _load_skills_db(self):
+        """加载技能数据库"""
+        try:
+            import json
+            with open("assets/json/skills_db.json", "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"加载技能数据库失败: {e}")
+            return []
+            import json
+            with open("assets/json/skills_db.json", "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"加载技能数据库失败: {e}")
+            return []

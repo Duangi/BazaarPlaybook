@@ -12,7 +12,7 @@ from core.detectors.yolo_detector import YoloDetector
 from core.capturers.dxcam_capturer import DXCamCapturer
 from core.capturers.mss_capturer import MSSCapturer
 from core.comparators.feature_matcher import FeatureMatcher
-from utils.window_utils import get_window_rect, get_mouse_pos_relative, is_window_foreground, is_focus_valid
+from utils.window_utils import get_window_rect, get_mouse_pos_relative, is_window_foreground, is_focus_valid, is_process_running
 
 from services.ocr_service import OCRService
 from data_manager.config_manager import ConfigManager
@@ -182,6 +182,14 @@ class AutoScanner(QThread):
                     time.sleep(1)
                     continue
 
+                # Check if game process is running
+                if not is_process_running("TheBazaar.exe"):
+                    if self._last_result:
+                        self.hide_detail.emit()
+                        self._last_result = None
+                    self._emit_status(True, "Waiting for Game Process...")
+                    time.sleep(2)
+                    continue
 
                 # 0. Check Focus
                 if not is_focus_valid("The Bazaar"):

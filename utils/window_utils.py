@@ -119,3 +119,25 @@ def restore_focus_to_game(game_title="The Bazaar"):
     except Exception as e:
         print(f"Failed to restore focus: {e}")
     return False
+
+
+def is_process_running(process_name="TheBazaar.exe"):
+    """
+    Check if a process is currently running.
+    Args:
+        process_name: The name of the process (e.g., "TheBazaar.exe")
+    Returns:
+        True if the process is running, False otherwise.
+    """
+    try:
+        import psutil
+        for proc in psutil.process_iter(['name']):
+            if proc.info['name'] and proc.info['name'].lower() == process_name.lower():
+                return True
+        return False
+    except ImportError:
+        # If psutil is not installed, fallback to checking window existence
+        # This is less reliable but works as a backup
+        return get_window_rect("The Bazaar") is not None
+    except Exception:
+        return False

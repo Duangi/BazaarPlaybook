@@ -4,9 +4,11 @@ onnxruntime-gpu
 opencv-python-headless
 dxcam
 pywin32
+psutil
 
 rapidocr_onnxruntime
 rapidfuzz
 zhconv
 requests
 Pillow
+mss
