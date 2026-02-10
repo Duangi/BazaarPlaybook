@@ -2,7 +2,15 @@
 import sys
 import os
 from loguru import logger
-from PySide6.QtCore import QCoreApplication # 用于检查是否是 GUI 应用
+from PySide6.QtCore import QCoreApplication, QObject, Signal, QMetaObject, Qt
+try:
+    from PySide6.QtWidgets import QTextEdit
+    from PySide6.QtGui import QTextCursor, QColor
+except ImportError:
+    # 如果在非GUI环境运行（比如测试脚本）
+    QTextEdit = None
+    QTextCursor = None
+    QColor = None
 
 # 确保 logs 文件夹存在
 if not os.path.exists("logs"):
@@ -12,6 +20,108 @@ if not os.path.exists("logs"):
 LOG_FORMAT = "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level:<8}</level> | <cyan>{module}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>"
 FILE_ROTATION = "10 MB"
 RETENTION = "7 days"
+
+# 🔥 Qt日志处理器（用于在GUI中显示日志）
+class QtLogHandler(QObject):
+    """将loguru日志输出到QTextEdit的Handler"""
+    log_signal = Signal(str, str)  # (level, message)
+    
+    def __init__(self, text_edit: QTextEdit):
+        super().__init__()
+        self.text_edit = text_edit
+        self.log_signal.connect(self._append_log, Qt.ConnectionType.QueuedConnection)
+        
+        # 日志级别颜色映射
+        self.level_colors = {
+            "TRACE": "#6c757d",
+            "DEBUG": "#17a2b8",
+            "INFO": "#28a745",     # 绿色
+            "SUCCESS": "#00d26a",  # 亮绿色
+            "WARNING": "#ffc107",  # 黄色
+            "ERROR": "#dc3545",    # 红色
+            "CRITICAL": "#e83e8c"  # 粉红色
+        }
+    
+    def write(self, message: str):
+        """loguru调用的写入方法"""
+        # 解析日志级别（从格式化后的消息中提取）
+        level = "INFO"
+        if "DEBUG" in message:
+            level = "DEBUG"
+        elif "WARNING" in message or "WARN" in message:
+            level = "WARNING"
+        elif "ERROR" in message:
+            level = "ERROR"
+        elif "SUCCESS" in message:
+            level = "SUCCESS"
+        elif "CRITICAL" in message:
+            level = "CRITICAL"
+        
+        self.log_signal.emit(level, message)
+    
+    def _append_log(self, level: str, message: str):
+        """在QTextEdit中追加日志（带颜色）"""
+        if not self.text_edit or self.text_edit.isHidden():
+            return
+        
+        color = self.level_colors.get(level, "#c0c0c0")
+        
+        # 移除ANSI转义码（loguru的彩色输出）
+        import re
+        clean_message = re.sub(r'\x1b\[[0-9;]*m', '', message)
+        
+        # 添加HTML格式的日志
+        html = f'<span style="color: {color};">{clean_message}</span><br>'
+        
+        cursor = self.text_edit.textCursor()
+        cursor.movePosition(QTextCursor.MoveOperation.End)
+        self.text_edit.setTextCursor(cursor)
+        self.text_edit.insertHtml(html)
+        
+        # 自动滚动到底部
+        try:
+            scrollbar = self.text_edit.verticalScrollBar()
+            if scrollbar:
+                scrollbar.setValue(scrollbar.maximum())
+        except:
+            pass
+    
+    def flush(self):
+        """刷新（loguru要求）"""
+        pass
+
+# 全局handler引用（防止被垃圾回收）
+_qt_handler = None
+
+def add_qt_log_handler(text_edit, debug_mode: bool = False):
+    """添加Qt日志处理器到loguru"""
+    if QTextEdit is None or text_edit is None:
+        return  # Qt组件未加载或text_edit为None
+    
+    global _qt_handler
+    
+    # 移除旧的Qt handler
+    if _qt_handler:
+        try:
+            logger.remove(_qt_handler.handler_id)
+        except:
+            pass
+    
+    # 创建新handler
+    _qt_handler = QtLogHandler(text_edit)
+    
+    # 根据debug模式设置级别
+    level = "DEBUG" if debug_mode else "INFO"
+    
+    # 添加到loguru
+    handler_id = logger.add(
+        _qt_handler.write,
+        format="{time:HH:mm:ss} | {level:<7} | {message}",
+        level=level,
+        colorize=False  # Qt端我们自己处理颜色
+    )
+    _qt_handler.handler_id = handler_id
+
 
 def setup_logger(is_gui_app: bool = True, debug_mode: bool = False):
     """

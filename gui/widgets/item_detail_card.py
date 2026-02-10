@@ -162,6 +162,12 @@ class ItemDetailCard(QFrame):
         self.setObjectName("ItemDetailCard")
         self.setProperty("class", "item-card-container")
         
+        # 🔥 检查是否已经有layout，避免重复设置
+        existing_layout = self.layout()
+        if existing_layout is not None:
+            # 已经有layout了，直接返回不重复创建
+            return
+        
         # 主布局
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)

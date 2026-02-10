@@ -25,8 +25,9 @@ class MonsterOverviewPage(QWidget):
         self.current_day = 1
         self.monster_cards = []  # 当前显示的卡片列表
         
-        # 详情悬浮窗（独立窗口）
-        self.detail_window = None
+        # ✅ 在初始化时就创建详情悬浮窗（隐藏状态）
+        self.detail_window = MonsterDetailFloatWindow()
+        self.detail_window.hide()  # 确保初始隐藏
         
         self._init_ui()
     
@@ -64,50 +65,82 @@ class MonsterOverviewPage(QWidget):
         self.load_day(1)
     
     def _create_toolbar(self) -> QWidget:
-        """创建顶部工具栏（一键识别按钮）"""
+        """创建顶部工具栏（战术目镜风格的一键识别按钮）"""
+        from PySide6.QtCore import QPropertyAnimation, QEasingCurve
+        
         toolbar = QFrame()
-        toolbar.setFixedHeight(50)
+        toolbar.setFixedHeight(60)
         toolbar_layout = QHBoxLayout(toolbar)
         toolbar_layout.setContentsMargins(0, 0, 0, 0)
         
-        # 一键识别按钮
-        scan_all_btn = QPushButton("🔍 一键识别所有野怪")
-        scan_all_btn.setObjectName("ScanAllButton")
+        # 🎯 一键识别按钮 - 平行四边形设计
+        scan_all_btn = QPushButton("⚡ 启动战术扫描")
+        scan_all_btn.setObjectName("TacticalScanButton")
         scan_all_btn.setCursor(Qt.PointingHandCursor)
-        scan_all_btn.setFixedHeight(40)
+        scan_all_btn.setFixedHeight(50)
         scan_all_btn.setStyleSheet("""
-            #ScanAllButton {
+            #TacticalScanButton {
+                /* 金属拉丝渐变 */
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 rgba(255, 204, 0, 0.8),
-                    stop:1 rgba(255, 180, 0, 0.8));
+                    stop:0 #8B7355,
+                    stop:0.3 #D4AF37,
+                    stop:0.5 #FFD700,
+                    stop:0.7 #D4AF37,
+                    stop:1 #8B7355);
                 color: #000000;
-                font-size: 13pt;
-                font-weight: bold;
-                border: none;
-                border-radius: 8px;
+                font-size: 14pt;
+                font-weight: 900;
+                border: 2px solid rgba(212, 175, 55, 0.6);
+                border-radius: 0px;
+                padding: 0px 30px;
+                text-align: center;
+                text-transform: uppercase;
+                letter-spacing: 2px;
+                /* 斜切效果通过变换实现 */
+                transform: skewX(-5deg);
             }
-            #ScanAllButton:hover {
+            #TacticalScanButton:hover {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 rgba(255, 220, 50, 0.9),
-                    stop:1 rgba(255, 200, 50, 0.9));
+                    stop:0 #A0825A,
+                    stop:0.3 #E5C158,
+                    stop:0.5 #FFE44D,
+                    stop:0.7 #E5C158,
+                    stop:1 #A0825A);
+                border: 2px solid rgba(255, 215, 0, 0.8);
+                box-shadow: 0 0 15px rgba(255, 215, 0, 0.5);
             }
-            #ScanAllButton:pressed {
-                background: rgba(200, 150, 0, 0.9);
+            #TacticalScanButton:pressed {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #6B5A45,
+                    stop:0.5 #B8941F,
+                    stop:1 #6B5A45);
+                border: 2px solid rgba(184, 148, 31, 0.8);
             }
         """)
         scan_all_btn.clicked.connect(self._on_scan_all_clicked)
+        
+        # 添加扫光动画效果（待实现）
+        # self._setup_shine_animation(scan_all_btn)
+        
         toolbar_layout.addWidget(scan_all_btn)
         
         return toolbar
     
     def _create_day_buttons(self) -> QWidget:
-        """创建 Day 按钮行（两排显示）"""
-        from PySide6.QtWidgets import QGridLayout
-        
+        """创建天数时间轴（横向滚动）"""
         container = QFrame()
-        container.setFixedHeight(90)  # 增加高度以容纳两排
-        layout = QGridLayout(container)
-        layout.setContentsMargins(0, 0, 0, 0)
+        container.setFixedHeight(55)
+        container.setObjectName("TimelineContainer")
+        container.setStyleSheet("""
+            #TimelineContainer {
+                background: rgba(15, 15, 20, 0.6);
+                border: 1px solid rgba(255, 204, 0, 0.1);
+                border-radius: 4px;
+            }
+        """)
+        
+        layout = QHBoxLayout(container)
+        layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(6)
         
         # 创建按钮组（互斥选中）
@@ -117,49 +150,47 @@ class MonsterOverviewPage(QWidget):
         # 获取所有可用的天数
         all_days = self.monster_db.get_all_days()
         
-        # 创建按钮（Day 1, Day 2, ..., Day 10+）分两排
-        # 第一排：Day 1-5
-        # 第二排：Day 6-10+
-        for idx, day in enumerate(all_days):
-            btn = QPushButton(f"Day {day}" if day <= 10 else "Day 10+")
+        # 🕐 时间轴节点
+        for day in all_days:
+            btn = QPushButton(f"{day}")
             btn.setCheckable(True)
             btn.setChecked(day == 1)  # 默认选中 Day 1
             btn.setCursor(Qt.PointingHandCursor)
-            btn.setFixedHeight(38)
-            btn.setProperty("day", day)  # 存储天数
+            btn.setFixedSize(36, 36)
+            btn.setProperty("day", day)
             
             btn.setStyleSheet("""
                 QPushButton {
-                    background: rgba(40, 40, 45, 0.8);
-                    color: #cccccc;
+                    /* 未选中：极细边框 */
+                    background: transparent;
+                    color: #888;
                     font-size: 11pt;
                     font-weight: 600;
-                    border: 1px solid rgba(255, 204, 0, 0.2);
-                    border-radius: 6px;
-                    padding: 0px 8px;
+                    border: 1px solid rgba(255, 204, 0, 0.15);
+                    border-radius: 18px;
                 }
                 QPushButton:hover {
-                    background: rgba(50, 50, 55, 0.9);
-                    border: 1px solid rgba(255, 204, 0, 0.4);
+                    background: rgba(255, 204, 0, 0.08);
+                    border: 1px solid rgba(255, 204, 0, 0.3);
+                    color: #aaa;
                 }
                 QPushButton:checked {
+                    /* 选中：实心金块 */
                     background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                        stop:0 rgba(255, 204, 0, 0.3),
-                        stop:1 rgba(255, 180, 0, 0.3));
-                    color: #ffcc00;
-                    border: 2px solid rgba(255, 204, 0, 0.8);
-                    font-weight: 700;
+                        stop:0 #FFD700,
+                        stop:1 #D4AF37);
+                    color: #000;
+                    font-weight: 900;
+                    border: 2px solid rgba(255, 215, 0, 0.8);
+                    box-shadow: 0 0 10px rgba(255, 215, 0, 0.4);
                 }
             """)
             
             btn.clicked.connect(lambda checked, d=day: self.load_day(d))
             self.day_button_group.addButton(btn, day)
-            
-            # 计算行列位置：前5个在第一排，后面的在第二排
-            row = 0 if idx < 5 else 1
-            col = idx if idx < 5 else idx - 5
-            layout.addWidget(btn, row, col)
+            layout.addWidget(btn)
         
+        layout.addStretch()
         return container
     
     def load_day(self, day: int):
@@ -202,8 +233,6 @@ class MonsterOverviewPage(QWidget):
             
         monster = self.monster_db.get_monster_by_id(monster_id)
         if monster:
-            if self.detail_window is None:
-                self.detail_window = MonsterDetailFloatWindow()
             self.detail_window.show_floating(monster)
 
     def show_floating_item_detail_by_id(self, item_id):
@@ -211,9 +240,6 @@ class MonsterOverviewPage(QWidget):
         if not item_id:
             return
 
-        if self.detail_window is None:
-            self.detail_window = MonsterDetailFloatWindow()
-            
         parent_window = self.window()
         # Ensure we use show_item_beside which we just added
         if hasattr(self.detail_window, 'show_item_beside'):
@@ -227,18 +253,12 @@ class MonsterOverviewPage(QWidget):
 
     def reset_detail_window_position(self):
         """重置悬浮窗位置"""
-        if self.detail_window is None:
-            self.detail_window = MonsterDetailFloatWindow()
         self.detail_window.reset_position()
         if self.detail_window.isVisible():
             self.detail_window.raise_()
 
     def _on_monster_hovered(self, monster: Monster):
         """怪物卡片被悬浮 - 在侧边显示详情"""
-        # 第一次悬浮时创建详情窗口
-        if self.detail_window is None:
-            self.detail_window = MonsterDetailFloatWindow()
-        
         # 获取主窗口（SidebarWindow）
         parent_window = self.window()
         

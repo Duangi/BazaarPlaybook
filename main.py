@@ -13,8 +13,10 @@ from gui.windows.debug_overlay_window import DebugOverlayWindow
 from utils.logger import setup_logger
 from gui.effects.holographic_collapse import HolographicCollapse
 from services.auto_scanner import AutoScanner
+from services.log_watcher import LogWatcher
+from services.match_history_manager import MatchHistoryManager
 from data_manager.config_manager import ConfigManager
-from gui.widgets.scanner_detail_window import ScannerDetailWindow
+from gui.widgets.unified_detail_window import UnifiedDetailWindow
 
 class BazaarApp:
     def __init__(self):
@@ -32,7 +34,15 @@ class BazaarApp:
         self.sidebar_win = SidebarWindow()
         self.island_win = IslandWindow()  # 灵动岛
         self.debug_win = DebugOverlayWindow() # 调试窗口
-        self.scanner_result_win = ScannerDetailWindow() # 扫描结果独立窗口
+        self.unified_detail_win = UnifiedDetailWindow() # 统一详情窗口（卡牌/技能/怪物）
+
+        # ✅ 实时日志监控服务
+        self.log_watcher = LogWatcher()
+        self.match_history_manager = MatchHistoryManager()
+        
+        # 连接日志监控信号
+        self.log_watcher.new_session_detected.connect(self._on_new_session_detected)
+        self.log_watcher.session_updated.connect(self._on_session_updated)
 
         # 自动扫描服务
         self.auto_scanner = AutoScanner(self.config_manager)
@@ -118,21 +128,15 @@ class BazaarApp:
             self._pending_show = None
 
     def _perform_show(self, dtype, obj_id):
-        if dtype == "monster":
-             self.sidebar_win.monster_page.show_floating_detail_by_id(obj_id)
-        elif dtype == "card":
-             self.scanner_result_win.show_item(obj_id)
+        # 统一使用 UnifiedDetailWindow 显示所有类型的详情
+        self.unified_detail_win.show_detail(dtype, obj_id)
 
     def on_scanner_force_show_detail(self, dtype, obj_id):
-        """Hotkey pressed - Show immediately and sticky"""
+        """Hotkey pressed - Show immediately"""
         self._cancel_pending_show() # Cancel any delayed regular hover
         
-        if dtype == "monster":
-             # Monster window doesn't support generic sticky mode yet via this path, 
-             # but we can just show it. 
-             self.sidebar_win.monster_page.show_floating_detail_by_id(obj_id)
-        elif dtype == "card":
-             self.scanner_result_win.show_item(obj_id, sticky=True)
+        # 统一使用 UnifiedDetailWindow，它自动获得焦点（sticky）
+        self.unified_detail_win.show_detail(dtype, obj_id)
 
     def on_item_pre_detected(self, dtype, obj_id, name):
         """
@@ -142,27 +146,52 @@ class BazaarApp:
         # 1. Show feedback on Island Window
         self.island_win.show_detection_feedback(name)
         
-        # 2. Maybe preload in scanner window without showing?
-        # self.scanner_result_win.preload(obj_id) # Optimization if needed
+        # 2. Maybe preload in unified detail window without showing?
+        # self.unified_detail_win.preload(obj_id) # Optimization if needed
 
 
     def on_scanner_hide_detail(self):
         """Scanner lost target"""
         self._cancel_pending_show()
         
-        # Only hide if NOT sticky
-        if not getattr(self.scanner_result_win, 'is_sticky', False):
-            self.sidebar_win.monster_page.hide_detail()
-            if self.scanner_result_win.isVisible():
-                self.scanner_result_win.hide()
+        # 如果详情窗口当前有焦点（激活状态），不自动隐藏
+        # 否则隐藏窗口
+        if self.unified_detail_win.isVisible() and not self.unified_detail_win.isActiveWindow():
+            self.unified_detail_win.hide()
 
     def on_scanner_status_changed(self, active, msg):
         self.island_win.set_scanner_status(active, msg)
+    
+    def _on_new_session_detected(self, session):
+        """检测到新会话"""
+        from loguru import logger
+        logger.info(f"[Main] 检测到新会话: {session.session_id}, 英雄: {session.hero}")
+        
+        # 如果会话已完成，保存到历史记录
+        if session.is_finished:
+            self.match_history_manager.add_match(session, session.hero)
+            # 注意：不再自动刷新历史页面，用户需手动刷新
+    
+    def _on_session_updated(self, session):
+        """会话更新（PVP完成）"""
+        from loguru import logger
+        logger.info(f"[Main] 会话更新: {session.session_id}, Days: {session.days}")
+        
+        # 更新或添加到历史记录
+        self.match_history_manager.add_match(session, session.hero)
+        # 注意：不再自动刷新历史页面，用户需手动刷新
+        
+        # 刷新历史页面
+        if hasattr(self.sidebar_win, 'history_page'):
+            self.sidebar_win.history_page.refresh()
 
     def run(self):
         """启动应用"""
         # Start Scanner
         self.auto_scanner.start()
+        
+        # ✅ 启动日志监控
+        self.log_watcher.start()
         
         # 检查是否需要自动诊断
         if self._need_diagnostic():

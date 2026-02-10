@@ -1,6 +1,7 @@
 {
   "encyclopedia_splitter_sizes": [
-    786,
-    345
-  ]
+    534,
+    600
+  ],
+  "match_mode": "all"
 }

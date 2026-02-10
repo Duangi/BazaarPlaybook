@@ -10,7 +10,7 @@ from PySide6.QtGui import QPixmap
 from data_manager.monster_loader import Monster
 from utils.i18n import get_i18n
 from utils.image_loader import ImageLoader, CardSize
-from gui.widgets.item_detail_card import ItemDetailCard
+from gui.widgets.item_detail_card_v2 import ItemDetailCard
 from gui.styles import SCROLLBAR_STYLE
 from gui.utils.frameless_helper import FramelessHelper
 
@@ -30,6 +30,18 @@ class MonsterDetailFloatWindow(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         
+        # ✅ 使用 Qt.WA_DontShowOnScreen - 这是最强的隐藏机制
+        # 窗口会被创建但永远不会显示，直到我们手动移除这个属性
+        self.setAttribute(Qt.WA_DontShowOnScreen, True)
+        
+        # ✅ 设置固定大小（从保存的设置中加载，或使用默认值）
+        self.settings = QSettings("Reborn", "MonsterDetailWindow")
+        saved_width = self.settings.value("window_width", 450, type=int)
+        saved_height = self.settings.value("window_height", 650, type=int)
+        
+        # ✅ 立即设置大小（在显示之前）
+        self.resize(saved_width, saved_height)
+        
         # --- Focus Tracking ---
         self.last_focused_window = None
         # ----------------------
@@ -41,17 +53,17 @@ class MonsterDetailFloatWindow(QWidget):
         # track a single active item popup to avoid overlapping popups
         self._active_item_popup = None
         
-        # 用于记住窗口大小和内容缩放比例
-        self.settings = QSettings("Reborn", "MonsterDetailWindow")
+        # ✅ 加载数据库
+        self.items_db = self._load_items_db()
+        self.skills_db = self._load_skills_db()
         
         # ✅ 内容缩放比例（默认1.0，范围0.5-2.0）
         self.content_scale = self.settings.value("content_scale", 1.0, type=float)
         self.content_scale = max(0.5, min(2.0, self.content_scale))  # 限制范围
         
-        # 缩放拖动状态
-        self._scaling = False
-        self._scale_start_pos = None
-        self._scale_start_scale = 1.0
+        # ✅ 单例模式：预创建所有 ItemDetailCard 实例（只创建一次，复用）
+        self._skill_cards_cache = {}  # {skill_id: ItemDetailCard}
+        self._item_card_cache = None  # 物品详情卡片（单例）
 
         # 延迟关闭定时器
         self.hide_timer = QTimer(self)
@@ -64,6 +76,12 @@ class MonsterDetailFloatWindow(QWidget):
         self._init_window()
         self._init_ui()
         
+        # ❌ 移除预创建（会导致启动时闪白框）
+        # self._precreate_item_cards()
+        
+        # 🔥 新方案：创建一个虚拟卡片强制完成Qt首次渲染
+        self._warmup_qt_rendering()
+        
         # ✅ 初始化可调整大小的辅助工具
         self.frameless_helper = FramelessHelper(
             self,
@@ -74,11 +92,15 @@ class MonsterDetailFloatWindow(QWidget):
             debug=False
         )
         
-        # 加载保存的窗口状态
-        self._load_window_state()
+        # 加载保存的窗口位置（但不加载大小，大小已经在开头设置了）
+        pos = self.settings.value("pos")
+        if pos:
+            self.move(pos)
         
         # ✅ 创建缩放手柄（右下角）
         self._create_scale_handle()
+        
+        # ✅ 窗口已完全初始化，但仍然是 WA_DontShowOnScreen 状态
     def closeEvent(self, event):
         """窗口关闭时保存状态"""
         self._save_window_state()
@@ -119,6 +141,9 @@ class MonsterDetailFloatWindow(QWidget):
 
     def _init_window(self):
         """初始化窗口属性"""
+        # ✅ 设置空标题，避免显示"python"
+        self.setWindowTitle("")
+        
         # 独立的悬浮窗口
         self.setWindowFlags(
             Qt.WindowType.Tool |  # 工具窗口，不在任务栏显示
@@ -128,11 +153,10 @@ class MonsterDetailFloatWindow(QWidget):
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setAttribute(Qt.WA_ShowWithoutActivating)  # 显示时不激活焦点
         
-        # ✅ 设置可调整大小的范围（不再固定大小）
+        # ✅ 设置可调整大小的范围
         self.setMinimumSize(360, 400)
         self.setMaximumSize(800, 1200)
-        # 默认大小（会被 _load_window_size 覆盖）
-        self.resize(400, 600)
+        # 大小已经在 __init__ 中设置
 
     def _init_ui(self):
         """初始化 UI"""
@@ -172,9 +196,14 @@ class MonsterDetailFloatWindow(QWidget):
 
             self.content_widget = QWidget()
             self.content_widget.setStyleSheet("background: transparent;")
+            # ✅ 正确策略：Preferred，让widget根据内容自适应
+            from PySide6.QtWidgets import QSizePolicy
+            self.content_widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+            
             self.content_layout = QVBoxLayout(self.content_widget)
             self.content_layout.setSpacing(10)
             self.content_layout.setContentsMargins(0, 0, 0, 0)
+            # ✅ 不设置对齐方式，让addStretch()控制空间分配
             
             print("[DEBUG] content_layout created:", self.content_layout)
 
@@ -206,18 +235,24 @@ class MonsterDetailFloatWindow(QWidget):
         """
         窗口大小改变时：
         1. 保存新的大小
-        2. 重新定位以保持与sidebar紧贴
-        3. 更新缩放手柄位置
+        2. 重新定位以保持与sidebar紧贴（仅在非用户调整时）
+        3. 更新缩放控制条位置
         """
         super().resizeEvent(event)
         
-        # ✅ 更新缩放手柄位置
-        self._update_scale_handle_position()
+        # ✅ 更新缩放控制条位置
+        self._update_scale_control_position()
         
         # 只在窗口可见且有锚点时处理
         if self.isVisible() and hasattr(self, '_anchor_widget') and self._anchor_widget:
             # 保存大小
             self._save_window_size()
+            
+            # ✅ 【修复】只在非拖动调整大小时才重新定位
+            # 如果用户正在拖动调整大小，不要改变窗口位置，否则会抖动
+            if hasattr(self, 'frameless_helper') and self.frameless_helper.is_resizing:
+                # 用户正在拖动调整大小，跳过重新定位
+                return
             
             # ✅ 重新计算位置以保持紧贴
             from PySide6.QtWidgets import QApplication
@@ -255,11 +290,26 @@ class MonsterDetailFloatWindow(QWidget):
         """
         self.display_mode = 'monster'
         self.current_monster = monster
+        
+        # ✅ 如果窗口已经显示且是同一个怪物，不需要重新加载
+        monster_id = getattr(monster, 'name_key', None) or getattr(monster, 'id', None)
+        if self.isVisible() and hasattr(self, '_last_shown_monster_id') and self._last_shown_monster_id == monster_id:
+            return
+        
+        self._last_shown_monster_id = monster_id
+        
+        # ✅ 先隐藏窗口
+        was_visible = self.isVisible()
+        if was_visible:
+            self.hide()
+        
+        # ✅ 更新内容（窗口隐藏状态）
         self._update_content()
         
-        # 恢复位置
+        # ✅ 恢复位置
         self._load_window_state()
         
+        # ✅ 内容完全准备好后再显示
         self.show()
         self.raise_()
 
@@ -269,7 +319,22 @@ class MonsterDetailFloatWindow(QWidget):
         """
         self.display_mode = 'item'
         self.current_item_id = item_id
+        
+        # ✅ 如果窗口已经显示且是同一个物品，不需要重新加载
+        if self.isVisible() and hasattr(self, '_last_shown_item_id') and self._last_shown_item_id == item_id:
+            return
+        
+        self._last_shown_item_id = item_id
+        
+        # ✅ 先隐藏窗口
+        was_visible = self.isVisible()
+        if was_visible:
+            self.hide()
+        
+        # ✅ 更新内容（窗口隐藏状态）
         self._update_content()
+        
+        # ✅ 定位并显示
         self._position_beside(anchor_widget)
 
     def show_beside(self, anchor_widget, monster):
@@ -279,7 +344,25 @@ class MonsterDetailFloatWindow(QWidget):
         """
         self.display_mode = 'monster'
         self.current_monster = monster
+        
+        # ✅ 如果窗口已经显示且是同一个怪物，不需要重新加载
+        monster_id = getattr(monster, 'name_key', None) or getattr(monster, 'id', None)
+        if self.isVisible() and hasattr(self, '_last_shown_monster_id') and self._last_shown_monster_id == monster_id:
+            # 只需要重新定位（可能sidebar移动了）
+            self._position_beside(anchor_widget)
+            return
+        
+        self._last_shown_monster_id = monster_id
+        
+        # ✅ 先隐藏窗口，防止内容更新时的白框闪烁
+        was_visible = self.isVisible()
+        if was_visible:
+            self.hide()
+        
+        # ✅ 更新内容（此时窗口隐藏，不会看到重建过程）
         self._update_content()
+        
+        # ✅ 内容准备完成后，定位并显示
         self._position_beside(anchor_widget)
 
     def _position_beside(self, anchor_widget):
@@ -341,27 +424,76 @@ class MonsterDetailFloatWindow(QWidget):
             y = screen.bottom() - self.height() - 10
 
         self.move(x, y)
-        self.show()
-        self.raise_()
+        
+        # ✅ 延迟显示：确保所有渲染完全结束后再显示
+        # 增加延迟到50ms，给Qt更多时间完成布局
+        from PySide6.QtCore import QTimer
+        QTimer.singleShot(50, self._delayed_show)  # 延迟50ms显示
 
         # 停止隐藏定时器
         self.hide_timer.stop()
+    
+    def _delayed_show(self):
+        """延迟显示窗口"""
+        if not self.isVisible():
+            # 🔥 双重保险：显示前再次确认窗口完全准备好
+            self.repaint()  # 强制重绘
+            self.show()
+            self.raise_()
+            self.activateWindow()
 
     def _update_content(self):
         """更新详情内容"""
-        # 清空旧内容
+        # ✅ 终极方案：完全隐藏窗口 + 移出屏幕
+        was_visible = self.isVisible()
+        old_pos = self.pos()  # 保存原位置
+        
+        # 1. 强制隐藏
+        self.hide()
+        self.setUpdatesEnabled(False)
+        self.setAttribute(Qt.WA_DontShowOnScreen, True)
+        
+        # 2. 移动到屏幕外（负坐标）- 确保即使意外显示也看不到
+        self.move(-10000, -10000)
+        
+        # 3. 阻止信号
+        old_block_state = self.signalsBlocked()
+        self.blockSignals(True)
+        
+        # 清空旧内容（只移除，不删除 widget）
         while self.content_layout.count():
             item = self.content_layout.takeAt(0)
             w = item.widget()
             if w:
-                w.deleteLater()
+                w.setParent(None)  # 移除但不删除
 
         if self.display_mode == 'item' and self.current_item_id:
              scale = self.content_scale
-             # Create ItemDetailCard
-             item_card = ItemDetailCard(item_id=self.current_item_id, item_type="item",
-                                        default_expanded=True, enable_tier_click=True, content_scale=scale)
-             self.content_layout.addWidget(item_card)
+             # ✅ 优化：首次创建时完全脱离父窗口，避免触发重绘
+             if self._item_card_cache is None:
+                 item_data = next((item for item in self.items_db if item.get("id") == self.current_item_id), {})
+                 # 创建时不指定parent，完全独立
+                 self._item_card_cache = ItemDetailCard(item_id=self.current_item_id, item_type="item",
+                                            default_expanded=True, enable_tier_click=True, content_scale=scale,
+                                            item_data=item_data, parent=None)
+                 # 设置parent但延迟添加到布局
+                 self._item_card_cache.setParent(self)
+             else:
+                 # ✅ 复用：只更新数据
+                 item_data = next((item for item in self.items_db if item.get("id") == self.current_item_id), {})
+                 self._item_card_cache.item_data = item_data
+                 self._item_card_cache.item_id = self.current_item_id
+             
+             self.content_layout.addWidget(self._item_card_cache)
+             
+             
+             # ✅ 恢复信号和渲染（针对物品模式提前返回）
+             self.move(old_pos)
+             self.blockSignals(old_block_state)
+             self.setAttribute(Qt.WA_DontShowOnScreen, False)
+             self.setUpdatesEnabled(True)
+             if was_visible:
+                 self.show()
              return
 
         if not self.current_monster:
@@ -416,13 +548,25 @@ class MonsterDetailFloatWindow(QWidget):
             skills_label.setStyleSheet(f"font-size: {int(10 * scale)}pt; font-weight: bold; color: #ffffff; margin-top: {int(6 * scale)}px;")
             self.content_layout.addWidget(skills_label)
 
-            # If skill groups exist, try to separate
+            # ✅ 优化：首次创建时完全脱离父窗口
             for skill in m.skills:
                 skill_id = skill.get("id", "")
-                current_tier = skill.get("current_tier", "bronze").lower()  # ✅ 转换为小写确保匹配
-                # ✅ 启用点击切换等级功能，并传入缩放比例
-                skill_card = ItemDetailCard(skill_id, item_type="skill", current_tier=current_tier, 
-                                           default_expanded=True, enable_tier_click=True, content_scale=scale)
+                current_tier = skill.get("current_tier", "bronze").lower()
+                
+                # 检查缓存
+                if skill_id not in self._skill_cards_cache:
+                    # 首次创建：不指定parent，完全独立
+                    skill_data = next((s for s in self.skills_db if s.get("id") == skill_id), {})
+                    skill_card = ItemDetailCard(skill_id, item_type="skill", current_tier=current_tier, 
+                                               default_expanded=True, enable_tier_click=True, content_scale=scale,
+                                               item_data=skill_data, parent=None)
+                    # 设置parent但延迟添加到布局
+                    skill_card.setParent(self)
+                    self._skill_cards_cache[skill_id] = skill_card
+                else:
+                    # ✅ 复用：从缓存获取
+                    skill_card = self._skill_cards_cache[skill_id]
+                
                 self.content_layout.addWidget(skill_card)
 
         # 3. 掉落物品（水平紧凑图标条）
@@ -490,140 +634,14 @@ class MonsterDetailFloatWindow(QWidget):
 
                     # 设置手型光标，提示可点击
                     self.setCursor(Qt.CursorShape.PointingHandCursor)
-
-                    # popup
-                    self._popup = None
-                    # show delay to avoid instant pop when moving between icons
-                    self._show_timer = QTimer(self)
-                    self._show_timer.setSingleShot(True)
-                    self._show_timer.setInterval(160)  # 160ms show delay
-                    self._show_timer.timeout.connect(self._do_show_popup)
-
-                    self._hide_timer = QTimer(self)
-                    self._hide_timer.setSingleShot(True)
-                    self._hide_timer.setInterval(300)
-                    self._hide_timer.timeout.connect(self._hide_popup)
+                
                 
                 def mousePressEvent(self, event):
-                    """点击item图片时，切换所有技能描述的等级显示模式"""
-                    # 切换弹窗中所有描述的等级显示
-                    if self._popup and hasattr(self._popup, '_toggle_tier_display'):
-                        self._popup._toggle_tier_display()
+                    """点击物品图标时，在怪物悬浮框下方展开显示该物品详情"""
+                    if event.button() == Qt.LeftButton:
+                        # 切换显示/隐藏物品详情
+                        outer_self._toggle_item_detail(self.item_id, self.current_tier, self.content_scale, self.monster_item_data)
                     super().mousePressEvent(event)
-
-                def _do_show_popup(self):
-                    # hide any outer active popup first to avoid overlapping
-                    try:
-                        if outer_self._active_item_popup and outer_self._active_item_popup is not getattr(self, '_popup', None):
-                            try:
-                                outer_self._active_item_popup.hide()
-                                outer_self._active_item_popup.deleteLater()
-                            except Exception:
-                                pass
-                            outer_self._active_item_popup = None
-                    except Exception:
-                        pass
-
-                    # ✅ 创建并直接展开详情（使用正确的 current_tier 和缩放比例）
-                    # ✅ 如果有怪物物品数据（包含enchantment），需要将其与items_db数据合并
-                    merged_item_data = None
-                    if self.monster_item_data:
-                        # 从 items_db 加载完整数据
-                        try:
-                            items_db_path = "assets/json/items_db.json"
-                            if os.path.exists(items_db_path):
-                                with open(items_db_path, 'r', encoding='utf-8') as f:
-                                    items_db = json.load(f)
-                                    db_item = next((i for i in items_db if i.get('id') == self.item_id), None)
-                                    if db_item:
-                                        # 合并：以items_db为基础，但保留monster数据中的enchantment
-                                        merged_item_data = db_item.copy()
-                                        if 'enchantment' in self.monster_item_data:
-                                            merged_item_data['enchantment'] = self.monster_item_data['enchantment']
-                        except Exception as e:
-                            print(f"[Popup] Error merging item data: {e}")
-                    
-                    if self._popup is None:
-                        self._popup = ItemDetailCard(self.item_id, item_type='item', current_tier=self.current_tier, 
-                                                     default_expanded=True, enable_tier_click=True, content_scale=self.content_scale,
-                                                     item_data=merged_item_data)  # ✅ 传入合并后的数据
-                        # 设置为顶层窗口 - 移除 WA_ShowWithoutActivating 以允许激活
-                        self._popup.setWindowFlags(Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
-                        
-                        # 强制应用样式到顶层弹窗
-                        try:
-                            self._popup.setAttribute(Qt.WA_StyledBackground, True)
-                            self._popup._setup_style()
-                            self._popup.style().unpolish(self._popup)
-                            self._popup.style().polish(self._popup)
-                        except Exception as e:
-                            print(f"[Popup] Style refresh error: {e}")
-                        
-                        # 动态计算宽度和高度：先让它自适应，然后限制范围
-                        try:
-                            # 允许内容自动调整大小，获取理想尺寸
-                            self._popup.adjustSize()
-                            ideal_size = self._popup.sizeHint()
-                            
-                            # 限制宽度：最小360，最大600，根据内容自适应
-                            final_width = max(360, min(600, ideal_size.width()))
-                            # 限制高度：最小200，最大600
-                            final_height = max(200, min(600, ideal_size.height()))
-                            
-                            self._popup.setFixedSize(final_width, final_height)
-                        except Exception:
-                            # 如果动态计算失败，使用默认值
-                            self._popup.setFixedSize(360, 400)
-
-                    # register as active popup
-                    outer_self._active_item_popup = self._popup
-
-                    if self._hide_timer.isActive():
-                        self._hide_timer.stop()
-                    global_pos = self.mapToGlobal(self.rect().bottomLeft())
-                    # 微调位置，优先向右展示，若超出屏幕则自动调整（QWidget.move 后系统会裁剪）
-                    self._popup.move(global_pos.x(), global_pos.y()+6)
-                    
-                    # 显示并强制提升到最前面
-                    self._popup.show()
-                    self._popup.raise_()
-                    self._popup.activateWindow()
-                    # 额外设置：确保窗口在所有其他窗口之上
-                    try:
-                        from PySide6.QtWidgets import QApplication
-                        QApplication.setActiveWindow(self._popup)
-                    except Exception:
-                        pass
-
-                def enterEvent(self, event):
-                    # cancel hide and start show timer
-                    if self._hide_timer.isActive():
-                        self._hide_timer.stop()
-                    # start delayed show
-                    self._show_timer.start()
-                    super().enterEvent(event)
-
-                def leaveEvent(self, event):
-                    # cancel pending show, start hide timer
-                    if self._show_timer.isActive():
-                        self._show_timer.stop()
-                    self._hide_timer.start()
-                    super().leaveEvent(event)
-
-                def _hide_popup(self):
-                    if self._popup:
-                        try:
-                            self._popup.hide()
-                            self._popup.deleteLater()
-                        except Exception:
-                            pass
-                        # clear outer active if it points to this popup
-                        try:
-                            if outer_self._active_item_popup is self._popup:
-                                outer_self._active_item_popup = None
-                        except Exception:
-                            pass
-                        self._popup = None
 
             # add inline images
             for item in m.items:
@@ -666,8 +684,23 @@ class MonsterDetailFloatWindow(QWidget):
             loot_layout.addStretch()
             self.content_layout.addWidget(loot_container)
 
-        # 底部弹性空间
-        self.content_layout.addStretch()
+        # ✅ 物品详情占位标记（点击掉落物品时会在这里插入ItemDetailCard）
+        # 用一个变量标记当前展开的物品ID和对应的卡片widget
+        if not hasattr(self, '_current_item_detail_card'):
+            self._current_item_detail_card = None
+            self._current_expanded_item_id = None
+
+        # ✅ 关键修复：在底部添加弹性spacer，吸收多余空间
+        # 这样卡片不会被拉伸，多余空间被spacer占用
+        self.content_layout.addStretch(1)
+        
+        # ✅ 恢复窗口状态
+        self.move(old_pos)  # 恢复原位置
+        self.blockSignals(old_block_state)
+        self.setAttribute(Qt.WA_DontShowOnScreen, False)
+        self.setUpdatesEnabled(True)
+        if was_visible:
+            self.show()
 
     def enterEvent(self, event):
         """鼠标进入 - 取消隐藏定时器"""
@@ -686,7 +719,21 @@ class MonsterDetailFloatWindow(QWidget):
         super().enterEvent(event)
 
     def leaveEvent(self, event):
-        """鼠标离开 - 启动延迟隐藏"""
+        """鼠标离开 - 启动延迟隐藏（需验证是否真的离开窗口）"""
+        # 🔥 修复：检查鼠标是否真的离开了窗口范围
+        # 当鼠标在子控件（如缩放按钮、按钮）上时，可能会错误触发 leaveEvent
+        from PySide6.QtGui import QCursor
+        global_pos = QCursor.pos()
+        local_pos = self.mapFromGlobal(global_pos)
+        
+        # 检查鼠标是否还在窗口矩形内（添加2px容差避免边缘抖动）
+        expanded_rect = self.rect().adjusted(-2, -2, 2, 2)
+        if expanded_rect.contains(local_pos):
+            # 鼠标还在窗口内，不应该隐藏
+            super().leaveEvent(event)
+            return
+        
+        # 真的离开了，启动隐藏定时器
         self.hide_timer.start()
         
         # Restore focus
@@ -703,6 +750,8 @@ class MonsterDetailFloatWindow(QWidget):
     def _delayed_hide(self):
         """延迟隐藏"""
         self.hide()
+        # ✅ 隐藏后重新设置 WA_DontShowOnScreen（下次显示时需要移除）
+        self.setAttribute(Qt.WA_DontShowOnScreen, True)
         self.closed.emit()
 
     def update_language(self):
@@ -711,84 +760,259 @@ class MonsterDetailFloatWindow(QWidget):
             self._update_content()
 
     def _create_scale_handle(self):
-        """创建右下角的缩放手柄"""
-        self.scale_handle = QLabel(self)
-        self.scale_handle.setObjectName("ScaleHandle")
-        self.scale_handle.setText("⇲")  # 对角线箭头
-        self.scale_handle.setFixedSize(24, 24)
-        self.scale_handle.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.scale_handle.setStyleSheet("""
-            QLabel#ScaleHandle {
+        """创建右下角的缩放控制条（+/- 按钮）"""
+        from PySide6.QtWidgets import QPushButton
+        
+        # 容器
+        self.scale_control = QWidget(self)
+        self.scale_control.setObjectName("ScaleControl")
+        control_layout = QHBoxLayout(self.scale_control)
+        control_layout.setContentsMargins(4, 2, 4, 2)
+        control_layout.setSpacing(3)
+        
+        # 样式
+        button_style = """
+            QPushButton {
                 background: rgba(245, 158, 11, 0.3);
-                border: 1px solid rgba(245, 158, 11, 0.6);
-                border-radius: 4px;
+                border: 1px solid rgba(245, 158, 11, 0.5);
+                border-radius: 3px;
                 color: #f59e0b;
-                font-size: 14pt;
+                font-size: 14px;
                 font-weight: bold;
+                padding: 2px 6px;
             }
-            QLabel#ScaleHandle:hover {
+            QPushButton:hover {
                 background: rgba(245, 158, 11, 0.5);
                 border-color: #f59e0b;
             }
+            QPushButton:pressed {
+                background: rgba(245, 158, 11, 0.7);
+            }
+        """
+        
+        # 缩小按钮
+        btn_minus = QPushButton("−")
+        btn_minus.setFixedSize(22, 22)
+        btn_minus.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_minus.setStyleSheet(button_style)
+        btn_minus.clicked.connect(lambda: self._adjust_scale(-0.1))
+        control_layout.addWidget(btn_minus)
+        
+        # 当前比例显示
+        self.scale_label = QLabel("100%")
+        self.scale_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.scale_label.setFixedWidth(45)
+        self.scale_label.setStyleSheet("""
+            QLabel {
+                color: #f59e0b;
+                font-size: 10px;
+                font-weight: 600;
+                background: transparent;
+            }
         """)
-        self.scale_handle.setCursor(Qt.CursorShape.SizeFDiagCursor)
-        self.scale_handle.setMouseTracking(True)
+        self.scale_label.setToolTip("缩放比例\n（重新打开窗口生效）")
+        control_layout.addWidget(self.scale_label)
         
-        # 安装事件过滤器来处理缩放拖动
-        self.scale_handle.mousePressEvent = self._on_scale_press
-        self.scale_handle.mouseMoveEvent = self._on_scale_move
-        self.scale_handle.mouseReleaseEvent = self._on_scale_release
+        # 放大按钮
+        btn_plus = QPushButton("+")
+        btn_plus.setFixedSize(22, 22)
+        btn_plus.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_plus.setStyleSheet(button_style)
+        btn_plus.clicked.connect(lambda: self._adjust_scale(0.1))
+        control_layout.addWidget(btn_plus)
         
-        # 初始位置（在 resizeEvent 中更新）
-        self._update_scale_handle_position()
+        # 容器样式
+        self.scale_control.setStyleSheet("""
+            #ScaleControl {
+                background: rgba(15, 15, 20, 0.85);
+                border: 1px solid rgba(245, 158, 11, 0.4);
+                border-radius: 4px;
+            }
+        """)
+        
+        # 初始位置和大小
+        self.scale_control.adjustSize()
+        self._update_scale_control_position()
+        self._update_scale_label()
     
-    def _update_scale_handle_position(self):
-        """更新缩放手柄的位置（右下角）"""
-        if hasattr(self, 'scale_handle'):
-            x = self.width() - self.scale_handle.width() - 8
-            y = self.height() - self.scale_handle.height() - 8
-            self.scale_handle.move(x, y)
-            self.scale_handle.raise_()  # 确保在最上层
+    def _update_scale_control_position(self):
+        """更新缩放控制条的位置（右下角）"""
+        if hasattr(self, 'scale_control'):
+            x = self.width() - self.scale_control.width() - 8
+            y = self.height() - self.scale_control.height() - 8
+            self.scale_control.move(x, y)
+            self.scale_control.raise_()
     
-    def _on_scale_press(self, event):
-        """开始缩放拖动"""
-        if event.button() == Qt.MouseButton.LeftButton:
-            self._scaling = True
-            self._scale_start_pos = event.globalPosition().toPoint()
-            self._scale_start_scale = self.content_scale
-            event.accept()
-    
-    def _on_scale_move(self, event):
-        """缩放拖动中"""
-        if self._scaling and self._scale_start_pos:
-            # 计算鼠标移动距离（斜向）
-            current_pos = event.globalPosition().toPoint()
-            delta = current_pos - self._scale_start_pos
-            
-            # 使用对角线距离来计算缩放变化
-            # 向右下拖动增加，向左上拖动减少
-            diagonal_delta = (delta.x() + delta.y()) / 2.0
-            scale_change = diagonal_delta / 200.0  # 每200px改变1.0倍
-            
-            new_scale = self._scale_start_scale + scale_change
-            new_scale = max(0.5, min(2.0, new_scale))  # 限制范围 0.5-2.0
-            
-            if abs(new_scale - self.content_scale) > 0.01:  # 避免过于频繁的更新
-                self.content_scale = new_scale
-                self._apply_content_scale()
-                
-            event.accept()
-    
-    def _on_scale_release(self, event):
-        """结束缩放拖动"""
-        if event.button() == Qt.MouseButton.LeftButton:
-            self._scaling = False
-            self._scale_start_pos = None
-            # 保存缩放比例
+    def _adjust_scale(self, delta: float):
+        """调整缩放比例"""
+        new_scale = self.content_scale + delta
+        new_scale = max(0.5, min(2.0, new_scale))
+        
+        if abs(new_scale - self.content_scale) > 0.01:
+            self.content_scale = new_scale
+            self._update_scale_label()
+            # 🔥 修复：不重建UI，只保存设置，下次打开时生效
+            # self._apply_content_scale()  # 这会导致重绘抖动
             self.settings.setValue("content_scale", self.content_scale)
-            event.accept()
+    
+    def _update_scale_label(self):
+        """更新比例标签"""
+        if hasattr(self, 'scale_label'):
+            self.scale_label.setText(f"{int(self.content_scale * 100)}%")
     
     def _apply_content_scale(self):
         """应用内容缩放比例"""
         # 更新所有内容的字体大小
         self._update_content()
+    
+    def _load_items_db(self):
+        """加载物品数据库"""
+        try:
+            import json
+            with open("assets/json/items_db.json", "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"加载物品数据库失败: {e}")
+            return []
+    
+    def _load_skills_db(self):
+        """加载技能数据库"""
+        try:
+            import json
+            with open("assets/json/skills_db.json", "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"加载技能数据库失败: {e}")
+            return []
+
+    def _toggle_item_detail(self, item_id, current_tier, content_scale, monster_item_data):
+        """
+        切换物品详情展示
+        如果点击的是同一个物品，则隐藏；如果是不同物品，则显示新物品详情
+        在掉落物品行的下方直接插入 ItemDetailCard
+        """
+        # 如果点击的是当前已展开的物品，则移除卡片
+        if self._current_expanded_item_id == item_id and self._current_item_detail_card:
+            # 🔥 保存滚动位置
+            scroll_bar = self.scroll.verticalScrollBar()
+            saved_scroll_pos = scroll_bar.value()
+            
+            # 从布局中移除并删除卡片
+            self.content_layout.removeWidget(self._current_item_detail_card)
+            self._current_item_detail_card.deleteLater()
+            self._current_item_detail_card = None
+            self._current_expanded_item_id = None
+            
+            # 🔥 恢复滚动位置
+            QTimer.singleShot(10, lambda: scroll_bar.setValue(saved_scroll_pos))
+            return
+        
+        # 如果已经有展开的卡片，先移除
+        if self._current_item_detail_card:
+            self.content_layout.removeWidget(self._current_item_detail_card)
+            self._current_item_detail_card.deleteLater()
+            self._current_item_detail_card = None
+        
+        # 记录新的展开物品ID
+        self._current_expanded_item_id = item_id
+        
+        # 合并物品数据（从 items_db 加载完整数据，保留 monster 数据中的 enchantment）
+        merged_item_data = None
+        if monster_item_data:
+            try:
+                items_db_path = "assets/json/items_db.json"
+                if os.path.exists(items_db_path):
+                    with open(items_db_path, 'r', encoding='utf-8') as f:
+                        items_db = json.load(f)
+                        db_item = next((i for i in items_db if i.get('id') == item_id), None)
+                        if db_item:
+                            merged_item_data = db_item.copy()
+                            if 'enchantment' in monster_item_data:
+                                merged_item_data['enchantment'] = monster_item_data['enchantment']
+            except Exception as e:
+                print(f"[ItemDetail] Error merging item data: {e}")
+        
+        # 如果没有合并数据，直接从 items_db 加载
+        if not merged_item_data:
+            try:
+                items_db_path = "assets/json/items_db.json"
+                if os.path.exists(items_db_path):
+                    with open(items_db_path, 'r', encoding='utf-8') as f:
+                        items_db = json.load(f)
+                        merged_item_data = next((i for i in items_db if i.get('id') == item_id), None)
+            except Exception as e:
+                print(f"[ItemDetail] Error loading item data: {e}")
+        
+        # 创建物品详情卡片
+        if merged_item_data:
+            item_card = ItemDetailCard(
+                item_id=item_id,
+                item_type='item',
+                current_tier=current_tier,
+                parent=self,
+                default_expanded=True,
+                enable_tier_click=True,
+                content_scale=content_scale,
+                item_data=merged_item_data
+            )
+            
+            # 找到 addStretch 的位置（应该是最后一个item）
+            stretch_index = self.content_layout.count() - 1
+            
+            # 🔥 保存当前滚动位置，避免插入widget后自动滚动
+            scroll_bar = self.scroll.verticalScrollBar()
+            saved_scroll_pos = scroll_bar.value()
+            
+            # 在 stretch 之前插入卡片
+            self.content_layout.insertWidget(stretch_index, item_card)
+            self._current_item_detail_card = item_card
+            
+            # 🔥 恢复原来的滚动位置，保持战利品图标在视野中的相对位置
+            QTimer.singleShot(10, lambda: scroll_bar.setValue(saved_scroll_pos))
+        else:
+            print(f"[ItemDetail] No data found for item: {item_id}")
+    
+    def _warmup_qt_rendering(self):
+        """
+        🔥 Qt渲染预热：在完全隐藏的状态下创建一个虚拟ItemDetailCard
+        强制Qt完成所有首次渲染初始化，避免后续创建时的白框闪现
+        """
+        try:
+            # 创建一个完整的虚拟数据结构，包含所有可能的字段
+            dummy_data = {
+                "id": "_warmup_",
+                "starting_tier": "Bronze",
+                "name": "Warmup",  # 使用简单字符串而不是dict
+                "name_cn": "预热",
+                "size": "medium / 中",
+                "type": "equipment",
+                "cooldown": "",
+                "cooldown_tiers": "",
+                "descriptions": [],
+                "skills": [],
+                "skills_passive": [],
+                "quests": [],
+                "enchantments": [],
+                "hero": "Common / 通用"
+            }
+            
+            # 使用关键字参数明确传递，避免参数顺序问题
+            dummy_card = ItemDetailCard(
+                item_id="_warmup_",
+                item_type="skill",
+                current_tier="bronze",
+                parent=None,
+                default_expanded=False,
+                enable_tier_click=False,
+                content_scale=1.0,
+                item_data=dummy_data
+            )
+            
+            # 立即销毁
+            dummy_card.deleteLater()
+            
+            print("[DEBUG] Qt rendering warmup completed")
+        except Exception as e:
+            import traceback
+            print(f"[WARNING] Qt rendering warmup failed: {e}")
+            print(f"[WARNING] Traceback: {traceback.format_exc()}")

@@ -10,8 +10,10 @@ pyobjc-framework-Cocoa; sys_platform == 'darwin'
 python-xlib; sys_platform == 'linux'
 ewmh; sys_platform == 'linux'
 
+psutil
 rapidocr_onnxruntime
 rapidfuzz
 zhconv
 requests
 Pillow
+mss

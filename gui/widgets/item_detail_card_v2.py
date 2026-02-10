@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
 from PySide6.QtCore import Qt, Signal, QSize
 from PySide6.QtGui import QPixmap, QPainter, QPainterPath, QColor
 from pathlib import Path
+from utils.i18n import I18nManager
 import json
 import re
 
@@ -21,6 +22,11 @@ class ItemDetailCard(QFrame):
                  current_tier: str = "bronze", parent=None, default_expanded: bool = False,
                  enable_tier_click: bool = False, content_scale: float = 1.0, item_data: Dict = None):
         super().__init__(parent)
+        
+        # ✅ 关键修复：在任何UI初始化之前，先设置不触发父窗口重绘的属性
+        self.setAttribute(Qt.WA_DontShowOnScreen, True)  # 暂时不显示到屏幕
+        self.setUpdatesEnabled(False)  # 禁用更新
+        
         # 兼容旧接口
         if item_data is None and item_id:
              # 如果只传了ID没传data (理论上现在都传data了)，留个空fallback
@@ -30,33 +36,56 @@ class ItemDetailCard(QFrame):
         self.content_scale = content_scale
         self.is_expanded = default_expanded
         
+        # ✅ 初始化i18n管理器
+        self.i18n = I18nManager()
+        
+        # ✅ 获取starting_tier用于设置边框颜色
+        # starting_tier格式: "Bronze / 青铜", "Gold / 黄金" 等
+        starting_tier_raw = self.item_data.get("starting_tier", "Bronze / 青铜")
+        if "/" in starting_tier_raw:
+            starting_tier_en = starting_tier_raw.split("/")[0].strip()
+        else:
+            starting_tier_en = starting_tier_raw.strip()
+        
+        self.starting_tier = starting_tier_en.lower()  # 转为小写用于查找
+        self.tier_colors_map = {
+            "bronze": "#cd7f32",
+            "silver": "#c0c0c0",
+            "gold": "#ffd700",
+            "diamond": "#b9f2ff",
+            "legendary": "#ff4500"
+        }
+        self.border_color = self.tier_colors_map.get(self.starting_tier, "#cd7f32")
+        
         self.setObjectName("ItemDetailCard")
-        # 基础样式：深色背景，微弱边框
+        
+        # ✅ 正确策略：
+        # - 水平Preferred：适应容器宽度
+        # - 垂直Minimum：使用内容的最小高度，不拉伸，不压缩
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        
+        # ✅ 延迟样式设置和UI初始化
+        self._update_style()
+        self._init_ui()
+        
+        # ✅ 初始化完成后，恢复显示能力
+        self.setAttribute(Qt.WA_DontShowOnScreen, False)
+        self.setUpdatesEnabled(True)
+    
+    def _update_style(self):
+        """更新组件样式（边框颜色始终使用starting_tier）"""
         self.setStyleSheet(f"""
             #ItemDetailCard {{
                 background: #2B2621;
                 border: 1px solid rgba(255, 255, 255, 0.05);
-                border-left: 0px solid transparent;
+                border-left: 3px solid {self.border_color};
                 border-radius: 6px;
             }}
             #ItemDetailCard:hover {{
                 background: #322C28;
-                border-left: 3px solid #ffcc00;
+                border-left: 3px solid {self.border_color};
             }}
         """)
-        
-        # 始终应用 hover 效果如果已经展开 (视觉反馈)
-        if self.is_expanded:
-            self.setStyleSheet(f"""
-                #ItemDetailCard {{
-                    background: #322C28;
-                    border: 1px solid rgba(255, 255, 255, 0.05);
-                    border-left: 3px solid #ffcc00;
-                    border-radius: 6px;
-                }}
-            """)
-
-        self._init_ui()
 
     def _init_ui(self):
         layout = QVBoxLayout(self)
@@ -78,19 +107,28 @@ class ItemDetailCard(QFrame):
         header.setCursor(Qt.CursorShape.PointingHandCursor)
         header.mousePressEvent = lambda e: self.toggle_expand()
         
-        scale = self.content_scale
         h_layout = QHBoxLayout(header)
         h_layout.setContentsMargins(12, 8, 12, 8)
         h_layout.setSpacing(12)
         
-        # 左侧图标
-        icon_size = 64
+        # ✅ 左侧图标（根据卡牌尺寸自适应，不使用固定容器）
+        # 根据卡牌尺寸计算实际图片大小（小:中:大 = 1:2:3）
+        card_size = self.item_data.get("size", "medium / 中").split(" / ")[0].lower()
+        if card_size == "small":
+            actual_icon_size = 32  # 1单位
+        elif card_size == "large":
+            actual_icon_size = 96  # 3单位
+        else:  # medium
+            actual_icon_size = 64  # 2单位
+        
         icon_label = QLabel()
-        icon_label.setFixedSize(icon_size, icon_size)
-        self._load_image(icon_label, self.item_data.get("id"), icon_size)
+        icon_label.setFixedSize(actual_icon_size, 64)  # 高度固定为64
+        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._load_image(icon_label, self.item_data.get("id"), actual_icon_size, 64)
+        
         h_layout.addWidget(icon_label)
         
-        # 中间信息
+        # 中间信息（左侧）
         info_layout = QVBoxLayout()
         info_layout.setSpacing(4)
         
@@ -98,9 +136,17 @@ class ItemDetailCard(QFrame):
         top_row = QHBoxLayout()
         top_row.setSpacing(8)
         
-        name = self.item_data.get("name_cn") or self.item_data.get("name", "Unknown")
+        # 根据当前语言选择名称
+        current_lang = self.i18n.get_language()
+        if current_lang == "en_US":
+            name = self.item_data.get("name", "Unknown")
+        else:
+            name_cn = self.item_data.get("name_cn", "")
+            name_en = self.item_data.get("name", "Unknown")
+            name = self.i18n.translate(name_cn, name_en) if name_cn else name_en
+        
         name_label = QLabel(name)
-        name_label.setStyleSheet(f"color: white; font-weight: bold; font-family: 'Microsoft YaHei UI'; font-size: 16px;")
+        name_label.setStyleSheet("color: white; font-weight: bold; font-family: 'Microsoft YaHei UI'; font-size: 16px;")
         top_row.addWidget(name_label)
         
         tier_label = self._create_tier_label()
@@ -112,23 +158,22 @@ class ItemDetailCard(QFrame):
         
         # 第二行：属性标签
         tags_row = self._create_tags_row()
-        info_layout.addLayout(tags_row)
+        info_layout.addWidget(tags_row)
         
         info_layout.addStretch()
         h_layout.addLayout(info_layout, 1)
         
-        # 右侧：英雄头像 + 箭头
+        # ✅ 右侧布局：英雄头像 + 箭头（独立列）
         right_layout = QVBoxLayout()
         right_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight)
+        right_layout.setSpacing(4)
         
-        hero_row = QHBoxLayout()
-        hero_row.setAlignment(Qt.AlignmentFlag.AlignRight)
+        # 英雄头像在顶部
         hero_avatar = self._create_hero_avatar()
         if hero_avatar:
-            hero_row.addWidget(hero_avatar)
-        right_layout.addLayout(hero_row)
+            right_layout.addWidget(hero_avatar)
         
-        # 箭头放到底部或中间
+        # 箭头放到底部
         right_layout.addStretch()
         arrow_label = QLabel("▴" if self.is_expanded else "▾")
         arrow_label.setAlignment(Qt.AlignmentFlag.AlignRight)
@@ -148,42 +193,202 @@ class ItemDetailCard(QFrame):
         layout.setContentsMargins(16, 12, 16, 16)
         layout.setSpacing(12)
         
-        # 1. 冷却 / 统计数据
+        # ✅ 1. 冷却时间（支持分级显示）
+        cooldown_tiers = self.item_data.get("cooldown_tiers")
         cooldown = self.item_data.get("cooldown")
-        if cooldown:
+        
+        if cooldown_tiers or cooldown:
             cd_layout = QHBoxLayout()
-            cd_layout.setSpacing(2)
-            # 大号蓝色文本
-            cd_val = QLabel(str(cooldown))
-            cd_val.setStyleSheet("color: #33CCFF; font-size: 24px; font-weight: bold; font-family: 'Microsoft YaHei UI';")
-            # 同样字体和颜色的单位，或者小一点
-            cd_unit = QLabel("秒")
-            cd_unit.setStyleSheet("color: #33CCFF; font-size: 14px; padding-top: 8px; font-family: 'Microsoft YaHei UI';")
+            cd_layout.setSpacing(6)
             
-            cd_layout.addWidget(cd_val)
-            cd_layout.addWidget(cd_unit)
-            
-            # 主动技能描述跟在冷却后面
-            skills = self.item_data.get("skills", [])
-            if skills:
-                skill_text = self._extract_text(skills[0])
-                if skill_text:
-                    # 移除前面的数字 (例如 "10s") 如果有的话
-                    # skill_text = re.sub(r'^\d+(\.\d+)?[s秒]\s*', '', skill_text)
+            if cooldown_tiers and "/" in str(cooldown_tiers):
+                # 显示分级冷却时间，用箭头连接
+                tiers = str(cooldown_tiers).split("/")
+                for i, tier_cd in enumerate(tiers):
+                    cd_val = QLabel(tier_cd)
+                    cd_val.setStyleSheet("color: #33CCFF; font-size: 20px; font-weight: bold; font-family: 'Microsoft YaHei UI';")
+                    cd_layout.addWidget(cd_val)
                     
-                    skill_lbl = QLabel(self._format_text(skill_text))
-                    skill_lbl.setWordWrap(True)
-                    skill_lbl.setStyleSheet("color: #ddd; font-size: 14px; margin-left: 10px; font-family: 'Microsoft YaHei UI'; line-height: 1.4;")
-                    cd_layout.addWidget(skill_lbl, 1) # Stretch to fill
+                    if i < len(tiers) - 1:
+                        arrow = QLabel("→")
+                        arrow.setStyleSheet("color: #666; font-size: 16px; padding: 0 4px;")
+                        cd_layout.addWidget(arrow)
+                
+                cd_unit = QLabel(self.i18n.translate("秒", "s"))
+                cd_unit.setStyleSheet("color: #33CCFF; font-size: 14px; padding-top: 4px; font-family: 'Microsoft YaHei UI';")
+                cd_layout.addWidget(cd_unit)
+            else:
+                # 单一冷却时间
+                cd_val = QLabel(str(cooldown))
+                cd_val.setStyleSheet("color: #33CCFF; font-size: 24px; font-weight: bold; font-family: 'Microsoft YaHei UI';")
+                cd_unit = QLabel(self.i18n.translate("秒", "s"))
+                cd_unit.setStyleSheet("color: #33CCFF; font-size: 14px; padding-top: 8px; font-family: 'Microsoft YaHei UI';")
+                cd_layout.addWidget(cd_val)
+                cd_layout.addWidget(cd_unit)
             
             cd_layout.addStretch()
             layout.addLayout(cd_layout)
         
-        # 2. 附魔效果列表
-        effects = self._get_effects_list()
-        for name, desc, color in effects:
-            row = self._create_effect_row(name, desc, color)
-            layout.addWidget(row)
+        # ✅ 2. 主动技能 (skills) 或技能描述 (descriptions)
+        # 技能数据使用descriptions字段，物品数据使用skills字段
+        descriptions = self.item_data.get("descriptions", [])
+        skills = self.item_data.get("skills", [])
+        
+        if descriptions:
+            # ✅ 技能描述格式: [{"en": "...", "cn": "..."}]
+            current_lang = self.i18n.get_language()
+            for desc in descriptions:
+                if isinstance(desc, dict):
+                    if current_lang == "en_US":
+                        desc_text = desc.get("en", "")
+                    else:
+                        desc_cn = desc.get("cn", "")
+                        desc_en = desc.get("en", "")
+                        desc_text = self.i18n.translate(desc_cn, desc_en) if desc_cn else desc_en
+                    
+                    if desc_text:
+                        skill_label = QLabel("🗡️ " + self._format_text(desc_text))
+                        skill_label.setWordWrap(True)
+                        skill_label.setStyleSheet("color: #ddd; font-size: 14px; font-family: 'Microsoft YaHei UI'; line-height: 1.6; padding: 4px 0;")
+                        layout.addWidget(skill_label)
+        elif skills:
+            # ✅ 物品技能格式
+            for skill in skills:
+                skill_text = self._extract_text(skill)
+                if skill_text:
+                    skill_label = QLabel("🗡️ " + self._format_text(skill_text))
+                    skill_label.setWordWrap(True)
+                    skill_label.setStyleSheet("color: #ddd; font-size: 14px; font-family: 'Microsoft YaHei UI'; line-height: 1.6; padding: 4px 0;")
+                    layout.addWidget(skill_label)
+        
+        # ✅ 3. 被动技能 (skills_passive)
+        skills_passive = self.item_data.get("skills_passive", [])
+        if skills_passive:
+            for skill in skills_passive:
+                skill_text = self._extract_text(skill)
+                if skill_text:
+                    skill_label = QLabel("⚙️ " + self._format_text(skill_text))
+                    skill_label.setWordWrap(True)
+                    skill_label.setStyleSheet("color: #ccc; font-size: 13px; font-family: 'Microsoft YaHei UI'; line-height: 1.6; padding: 4px 0; font-style: italic;")
+                    layout.addWidget(skill_label)
+        
+        # ✅ 4. 任务 (quests)
+        # 新格式: [{"en_target": "...", "cn_target": "...", "en_reward": "...", "cn_reward": "..."}]
+        quests = self.item_data.get("quests")
+        if quests:
+            current_lang = self.i18n.get_language()
+            
+            if isinstance(quests, list):
+                for i, quest in enumerate(quests, 1):
+                    if isinstance(quest, dict):
+                        # 新格式：包含 target 和 reward
+                        if current_lang == "en_US":
+                            target = quest.get("en_target", "")
+                            reward = quest.get("en_reward", "")
+                        else:
+                            target_cn = quest.get("cn_target", "")
+                            target_en = quest.get("en_target", "")
+                            reward_cn = quest.get("cn_reward", "")
+                            reward_en = quest.get("en_reward", "")
+                            target = self.i18n.translate(target_cn, target_en) if target_cn else target_en
+                            reward = self.i18n.translate(reward_cn, reward_en) if reward_cn else reward_en
+                        
+                        if target or reward:
+                            # 显示任务序号
+                            quest_header = QLabel(f"📜 {self.i18n.translate('任务', 'Quest')} {i}:")
+                            quest_header.setWordWrap(True)
+                            quest_header.setStyleSheet("color: #9098fe; font-size: 13px; font-family: 'Microsoft YaHei UI'; font-weight: bold; padding: 4px 0 2px 0;")
+                            layout.addWidget(quest_header)
+                            
+                            # 显示目标
+                            if target:
+                                target_label = QLabel(f"  → {self._format_text(target)}")
+                                target_label.setWordWrap(True)
+                                target_label.setStyleSheet("color: #aaa; font-size: 12px; font-family: 'Microsoft YaHei UI'; line-height: 1.4; padding: 2px 0 2px 12px;")
+                                layout.addWidget(target_label)
+                            
+                            # 显示奖励
+                            if reward:
+                                reward_label = QLabel(f"  ✨ {self._format_text(reward)}")
+                                reward_label.setWordWrap(True)
+                                reward_label.setStyleSheet("color: #ffcc00; font-size: 12px; font-family: 'Microsoft YaHei UI'; line-height: 1.4; padding: 2px 0 4px 12px;")
+                                layout.addWidget(reward_label)
+                    else:
+                        # 旧格式：直接是文本
+                        quest_text = self._extract_text(quest)
+                        if quest_text:
+                            quest_label = QLabel("📜 " + self._format_text(quest_text))
+                            quest_label.setWordWrap(True)
+                            quest_label.setStyleSheet("color: #9098fe; font-size: 13px; font-family: 'Microsoft YaHei UI'; line-height: 1.6; padding: 4px 0;")
+                            layout.addWidget(quest_label)
+            elif isinstance(quests, dict):
+                # 单个任务对象
+                if current_lang == "en_US":
+                    target = quests.get("en_target", "")
+                    reward = quests.get("en_reward", "")
+                else:
+                    target_cn = quests.get("cn_target", "")
+                    target_en = quests.get("en_target", "")
+                    reward_cn = quests.get("cn_reward", "")
+                    reward_en = quests.get("en_reward", "")
+                    target = self.i18n.translate(target_cn, target_en) if target_cn else target_en
+                    reward = self.i18n.translate(reward_cn, reward_en) if reward_cn else reward_en
+                
+                if target or reward:
+                    quest_header = QLabel(f"📜 {self.i18n.translate('任务', 'Quest')}:")
+                    quest_header.setWordWrap(True)
+                    quest_header.setStyleSheet("color: #9098fe; font-size: 13px; font-family: 'Microsoft YaHei UI'; font-weight: bold; padding: 4px 0 2px 0;")
+                    layout.addWidget(quest_header)
+                    
+                    if target:
+                        target_label = QLabel(f"  → {self._format_text(target)}")
+                        target_label.setWordWrap(True)
+                        target_label.setStyleSheet("color: #aaa; font-size: 12px; font-family: 'Microsoft YaHei UI'; line-height: 1.4; padding: 2px 0 2px 12px;")
+                        layout.addWidget(target_label)
+                    
+                    if reward:
+                        reward_label = QLabel(f"  ✨ {self._format_text(reward)}")
+                        reward_label.setWordWrap(True)
+                        reward_label.setStyleSheet("color: #ffcc00; font-size: 12px; font-family: 'Microsoft YaHei UI'; line-height: 1.4; padding: 2px 0 4px 12px;")
+                        layout.addWidget(reward_label)
+                else:
+                    # 旧格式
+                    quest_text = self._extract_text(quests)
+                    if quest_text:
+                        quest_label = QLabel("📜 " + self._format_text(quest_text))
+                        quest_label.setWordWrap(True)
+                        quest_label.setStyleSheet("color: #9098fe; font-size: 13px; font-family: 'Microsoft YaHei UI'; line-height: 1.6; padding: 4px 0;")
+                        layout.addWidget(quest_label)
+        
+        # ✅ 5. 附魔效果 (enchantments)
+        enchantments = self.item_data.get("enchantments", {})
+        if enchantments and isinstance(enchantments, dict):
+            for ench_key, ench_data in enchantments.items():
+                if isinstance(ench_data, dict):
+                    # 根据当前语言选择名称和效果文本
+                    current_lang = self.i18n.get_language()
+                    if current_lang == "en_US":
+                        name = ench_data.get("name_en", ench_key)
+                        effect = ench_data.get("effect_en", "")
+                    else:
+                        name_cn = ench_data.get("name_cn", ench_key)
+                        name_en = ench_data.get("name_en", ench_key)
+                        effect_cn = ench_data.get("effect_cn", "")
+                        effect_en = ench_data.get("effect_en", "")
+                        name = self.i18n.translate(name_cn, name_en) if name_cn else name_en
+                        effect = self.i18n.translate(effect_cn, effect_en) if effect_cn else effect_en
+                    
+                    # 根据附魔类型设置颜色
+                    enchant_colors = {
+                        "Golden": "#f59e0b", "Heavy": "#5c7cfa", "Icy": "#22b8cf",
+                        "Turbo": "#00ecc3", "Shielded": "#f4cf20", "Restorative": "#8eea31",
+                        "Toxic": "#0ebe4f", "Fiery": "#ff9f45", "Shiny": "#98a8fe",
+                        "Deadly": "#f5503d", "Radiant": "#98a8fe", "Obsidian": "#9d4a6f"
+                    }
+                    color = enchant_colors.get(ench_key, "#999")
+                    
+                    row = self._create_effect_row(name, effect, color)
+                    layout.addWidget(row)
             
         return details
 
@@ -321,31 +526,64 @@ class ItemDetailCard(QFrame):
         return res
 
     def _extract_text(self, obj) -> str:
-        """从可能是dict/str的对象提取中文文本"""
+        """从可能是dict/str的对象提取文本（根据当前语言）"""
         if isinstance(obj, dict):
-            return obj.get("cn", obj.get("en", ""))
+            current_lang = self.i18n.get_language()
+            if current_lang == "en_US":
+                return obj.get("en", "")
+            else:
+                # 简体/繁体中文
+                cn_text = obj.get("cn", "")
+                en_text = obj.get("en", "")
+                return self.i18n.translate(cn_text, en_text) if cn_text else en_text
         return str(obj) if obj else ""
 
     def _create_tier_label(self) -> QLabel:
-        tier_raw = self.item_data.get("tier", "Common")
-        if not tier_raw: tier_raw = "Common"
+        """创建品级标签
         
-        tier_key = tier_raw.split(" / ")[0].lower()
+        规则：
+        - 青铜 → 青铜+
+        - 白银 → 白银+
+        - 黄金 → 黄金+
+        - 钻石 → 钻石（不加+）
+        - 传说 → 传说（不加+）
+        """
+        # ✅ 使用 starting_tier，格式如 "Gold / 黄金" 或 "Bronze / 青铜"
+        tier_raw = self.item_data.get("starting_tier", "Bronze / 青铜")
+        if not tier_raw:
+            tier_raw = "Bronze / 青铜"
         
+        # 解析 "English / 中文" 格式
+        if "/" in tier_raw:
+            parts = tier_raw.split("/")
+            tier_en = parts[0].strip()
+            tier_cn = parts[1].strip() if len(parts) > 1 else tier_en
+        else:
+            tier_en = tier_raw.strip()
+            tier_cn = tier_raw.strip()
+        
+        # 品级映射表
         tier_colors = {
-            "bronze": ("青铜", "#cd7f32"), "common": ("青铜", "#cd7f32"),
-            "silver": ("白银", "#c0c0c0"),
-            "gold": ("黄金", "#ffd700"), 
-            "diamond": ("钻石", "#b9f2ff"),
-            "legendary": ("传说", "#ff4500"), "godly": ("神级", "#ff4500")
+            "bronze": ("#cd7f32", "青铜+", "Bronze+"),
+            "silver": ("#c0c0c0", "白银+", "Silver+"),
+            "gold": ("#ffd700", "黄金+", "Gold+"), 
+            "diamond": ("#b9f2ff", "钻石", "Diamond"),  # 钻石不加+
+            "legendary": ("#ff4500", "传说", "Legendary")  # 传说不加+
         }
         
-        # Default to common/bronze if not found
-        txt, color = tier_colors.get(tier_key, ("未知", "#888888"))
+        # 根据英文名称获取配置
+        tier_key = tier_en.lower()
+        color, display_cn, display_en = tier_colors.get(tier_key, ("#cd7f32", "青铜+", "Bronze+"))
         
-        if "+" in tier_raw: txt += "+"
+        # 根据当前语言选择显示文本
+        current_lang = self.i18n.get_language()
+        if current_lang == "en_US":
+            display_text = display_en
+        else:
+            # 简体/繁体中文
+            display_text = self.i18n.translate(display_cn, display_en)
         
-        lbl = QLabel(txt)
+        lbl = QLabel(display_text)
         lbl.setStyleSheet(f"""
             color: {color}; 
             border: 1px solid {color}; 
@@ -359,19 +597,45 @@ class ItemDetailCard(QFrame):
         return lbl
 
     def _create_tags_row(self) -> QWidget:
+        """创建标签行，支持多语言"""
         w = QWidget()
-        l = QHBoxLayout(w)
-        l.setContentsMargins(0, 0, 0, 0)
-        l.setSpacing(4)
+        w.setFixedHeight(20)  # ✅ 固定标签行高度，避免被拉伸
+        layout = QHBoxLayout(w)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
+        layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)  # ✅ 顶部对齐
         
-        tags = self.item_data.get("tags", [])
-        if isinstance(tags, str): tags = [tags]
+        tags = self.item_data.get("tags", "")
+        if not tags:
+            layout.addStretch()
+            return w
+        
+        # 解析标签字符串 "Tag1 / 标签1 | Tag2 / 标签2"
+        tag_list = [t.strip() for t in tags.split("|")] if isinstance(tags, str) else tags
         
         # 只显示前3-4个标签，避免太长
-        for t in tags[:4]:
-            t = t.strip()
-            if not t: continue
-            lbl = QLabel(t)
+        for tag_text in tag_list[:4]:
+            if not tag_text:
+                continue
+            
+            # 解析 "English / 中文" 格式
+            if "/" in tag_text:
+                parts = tag_text.split("/")
+                en_text = parts[0].strip()
+                cn_text = parts[1].strip() if len(parts) > 1 else en_text
+            else:
+                en_text = tag_text.strip()
+                cn_text = tag_text.strip()
+            
+            # 根据当前语言选择显示文本
+            current_lang = self.i18n.get_language()
+            if current_lang == "en_US":
+                display_text = en_text
+            else:
+                # 简体中文和繁体中文都显示中文
+                display_text = self.i18n.translate(cn_text, en_text)
+            
+            lbl = QLabel(display_text)
             lbl.setStyleSheet("""
                 background: rgba(152, 168, 254, 0.15);
                 color: #98a8fe;
@@ -381,93 +645,200 @@ class ItemDetailCard(QFrame):
                 font-size: 10px;
                 font-family: 'Microsoft YaHei UI';
             """)
-            l.addWidget(lbl)
+            layout.addWidget(lbl)
         
-        l.addStretch()
+        layout.addStretch()
         return w
 
-    def _create_hero_avatar(self) -> QLabel:
-        heroes = self.item_data.get("heroes", [])
-        if not heroes or (isinstance(heroes, list) and "Common" in str(heroes[0])): return None
+    def _create_hero_avatar(self) -> QWidget:
+        """创建英雄头像（通用英雄不显示标签）
         
+        Returns:
+            如果是专属英雄，返回带圆框的圆形头像；如果是通用，返回None（不显示）
+        """
+        heroes = self.item_data.get("heroes", "")
+        if not heroes:
+            return None
+        
+        # 解析 "Pygmalien / 皮格马利翁" 或 "Common / 通用" 格式
         hero_raw = heroes[0] if isinstance(heroes, list) else str(heroes)
-        hero_name = hero_raw.split("/")[0] 
+        if "/" in hero_raw:
+            hero_en = hero_raw.split("/")[0].strip()
+            hero_cn = hero_raw.split("/")[1].strip() if "/" in hero_raw else hero_en
+        else:
+            hero_en = hero_raw.strip()
+            hero_cn = hero_raw.strip()
         
-        label = QLabel()
+        # ✅ 如果是通用，不显示任何标签（返回None）
+        if hero_en.lower() == "common":
+            return None
+        
+        # ✅ 否则返回带圆框的圆形英雄头像
+        container = QWidget()
+        container.setFixedSize(36, 36)  # 外层容器稍大，留出边框空间
+        
+        label = QLabel(container)
         label.setFixedSize(32, 32)
+        label.move(2, 2)  # 居中放置
         
-        # Load logic simplified
-        path = Path(f"assets/images/heroes/{hero_name}.webp")
+        # 加载英雄头像
+        path = Path(f"assets/images/heroes/{hero_en}.webp")
         if path.exists():
-             pix = QPixmap(str(path)).scaled(32, 32, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
-             
-             # Circular mask
-             rounded = QPixmap(32, 32)
-             rounded.fill(Qt.GlobalColor.transparent)
-             painter = QPainter(rounded)
-             painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-             path_draw = QPainterPath()
-             path_draw.addEllipse(0, 0, 32, 32)
-             painter.setClipPath(path_draw)
-             painter.drawPixmap(0, 0, pix)
-             painter.end()
-             label.setPixmap(rounded)
-             label.setToolTip(f"专属英雄: {hero_name}")
-        return label
+            pix = QPixmap(str(path)).scaled(32, 32, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            
+            # 圆形遮罩
+            rounded = QPixmap(32, 32)
+            rounded.fill(Qt.GlobalColor.transparent)
+            painter = QPainter(rounded)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            path_draw = QPainterPath()
+            path_draw.addEllipse(0, 0, 32, 32)
+            painter.setClipPath(path_draw)
+            painter.drawPixmap(0, 0, pix)
+            painter.end()
+            label.setPixmap(rounded)
+            
+            # 根据语言设置提示文本
+            current_lang = self.i18n.get_language()
+            if current_lang == "en_US":
+                label.setToolTip(f"Exclusive Hero: {hero_en}")
+            else:
+                tooltip_text = self.i18n.translate(f"专属英雄: {hero_cn}", f"Exclusive Hero: {hero_en}")
+                label.setToolTip(tooltip_text)
+        
+        # ✅ 添加圆形边框到容器
+        container.setStyleSheet("""
+            QWidget {
+                background: transparent;
+                border: 2px solid rgba(212, 175, 55, 0.6);
+                border-radius: 18px;
+            }
+        """)
+        
+        return container
 
-    def _load_image(self, label: QLabel, item_id: str, size: int):
-        path = Path(f"assets/images/card/{item_id}.webp")
-        if not path.exists():
-            path = Path(f"assets/images/skill/{item_id}.webp")
+    def _load_image(self, label: QLabel, item_id: str, width: int, height: int):
+        """加载并显示物品/技能图片
+        
+        Args:
+            label: 目标QLabel
+            item_id: 物品/技能ID
+            width: 图片宽度
+            height: 图片高度
+        """
+        # ✅ 优先使用art_key字段（技能专用）
+        art_key = self.item_data.get("art_key", "")
+        path = None
+        
+        if art_key:
+            # 从art_key提取文件名
+            # "Assets/TheBazaar/Art/UI/Skills/Stelle/Icon_Skill_STE_ThrillOfTheFlight.png"
+            # → "Icon_Skill_STE_ThrillOfTheFlight.png"
+            filename = art_key.split("/")[-1] if "/" in art_key else art_key
+            # 处理后缀：去掉.png后缀，添加.webp
+            if filename.endswith(".png"):
+                filename = filename[:-4] + ".webp"
+            elif not filename.endswith(".webp"):
+                # 如果没有任何后缀，添加.webp
+                filename = filename + ".webp"
             
-        if path.exists():
-            pix = QPixmap(str(path)).scaled(size, size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            # 优先在skill目录查找
+            skill_path = Path(f"assets/images/skill/{filename}")
+            if skill_path.exists():
+                path = skill_path
+            else:
+                # 也尝试使用item_id
+                skill_path_id = Path(f"assets/images/skill/{item_id}.webp")
+                if skill_path_id.exists():
+                    path = skill_path_id
+        
+        # 如果没有art_key或找不到，使用item_id在card目录查找
+        if not path:
+            card_path = Path(f"assets/images/card/{item_id}.webp")
+            if card_path.exists():
+                path = card_path
+            else:
+                # 最后尝试skill目录
+                skill_path = Path(f"assets/images/skill/{item_id}.webp")
+                if skill_path.exists():
+                    path = skill_path
             
-            # Rounded rect mask
-            rounded = QPixmap(size, size)
+        if path and path.exists():
+            # ✅ 先按宽度缩放，如果高度不足则拉伸至目标高度
+            original_pix = QPixmap(str(path))
+            
+            # 先按宽度等比缩放
+            scaled_pix = original_pix.scaled(
+                width, 99999,  # 先按宽度缩放，高度不限
+                Qt.AspectRatioMode.KeepAspectRatio, 
+                Qt.TransformationMode.SmoothTransformation
+            )
+            
+            # 如果缩放后高度小于目标高度，则在高度上拉伸
+            if scaled_pix.height() < height:
+                scaled_pix = scaled_pix.scaled(
+                    width, height,
+                    Qt.AspectRatioMode.IgnoreAspectRatio,  # 忽略比例，拉伸至目标尺寸
+                    Qt.TransformationMode.SmoothTransformation
+                )
+            
+            pix = scaled_pix
+            
+            # 创建圆角矩形遮罩
+            rounded = QPixmap(width, height)
             rounded.fill(Qt.GlobalColor.transparent)
             painter = QPainter(rounded)
             painter.setRenderHint(QPainter.RenderHint.Antialiasing)
             p = QPainterPath()
-            p.addRoundedRect(0, 0, size, size, 4, 4)
+            p.addRoundedRect(0, 0, width, height, 4, 4)
             painter.setClipPath(p)
-            painter.drawPixmap(0, 0, pix)
+            
+            # 居中绘制图片
+            x_offset = (width - pix.width()) // 2
+            y_offset = (height - pix.height()) // 2
+            painter.drawPixmap(x_offset, y_offset, pix)
             painter.end()
             
             label.setPixmap(rounded)
         else:
-             label.setStyleSheet("background: #333; border-radius: 4px;")
+            # 如果图片不存在，显示占位符
+            label.setStyleSheet("background: #333; border-radius: 4px;")
+            label.setText("?")
+            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            label.setStyleSheet("background: #333; border-radius: 4px; color: #666; font-size: 24px;")
 
     def toggle_expand(self):
+        """切换展开/折叠状态"""
         self.is_expanded = not self.is_expanded
         self.details.setVisible(self.is_expanded)
         
-        # Update styling
-        scale = self.content_scale
-        base_style = f"""
-            #ItemDetailCard {{
-                background: #2B2621;
-                border: 1px solid rgba(255, 255, 255, 0.05);
-                border-left: 0px solid transparent;
-                border-radius: 6px;
-            }}
-            #ItemDetailCard:hover {{
-                background: #322C28;
-                border-left: 3px solid #ffcc00;
-            }}
-        """
-        active_style = f"""
-            #ItemDetailCard {{
-                background: #322C28;
-                border: 1px solid rgba(255, 255, 255, 0.05);
-                border-left: 3px solid #ffcc00;
-                border-radius: 6px;
-            }}
-        """
-        self.setStyleSheet(active_style if self.is_expanded else base_style)
+        # ✅ 始终保持边框颜色不变，仅更新背景色
+        if self.is_expanded:
+            self.setStyleSheet(f"""
+                #ItemDetailCard {{
+                    background: #322C28;
+                    border: 1px solid rgba(255, 255, 255, 0.05);
+                    border-left: 3px solid {self.border_color};
+                    border-radius: 6px;
+                }}
+            """)
+        else:
+            self._update_style()
         
         # Find arrow and update
         for child in self.findChildren(QLabel):
             if child.text() in ["▴", "▾"]:
                 child.setText("▴" if self.is_expanded else "▾")
                 break
+    
+    def update_language(self):
+        """更新语言显示"""
+        # 重新创建UI以应用新语言
+        # 清空现有内容
+        while self.layout().count():
+            item = self.layout().takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        
+        # 重新初始化UI
+        self._init_ui()

@@ -4,12 +4,12 @@
 """
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
                                QPushButton, QFrame, QScrollArea,
-                               QCheckBox, QSpinBox, QButtonGroup, QRadioButton)
-from PySide6.QtCore import Qt, Signal, QSettings
-from PySide6.QtGui import QFont, QColor
+                               QCheckBox, QSpinBox, QButtonGroup, QRadioButton, QTextEdit)
+from PySide6.QtCore import Qt, Signal, QSettings, QObject
+from PySide6.QtGui import QFont, QColor, QTextCursor
 from loguru import logger
 
-from utils.logger import setup_logger
+from utils.logger import setup_logger, add_qt_log_handler
 from data_manager.config_manager import ConfigManager
 
 class SettingsPage(QWidget):
@@ -171,6 +171,10 @@ class SettingsPage(QWidget):
         dev_group = self._create_developer_section()
         content_layout.addWidget(dev_group)
         
+        # === 5. 日志控制台 ===
+        log_console = self._create_log_console()
+        content_layout.addWidget(log_console)
+        
         # 弹性空间
         content_layout.addStretch()
         
@@ -233,6 +237,60 @@ class SettingsPage(QWidget):
         self.config_manager.save({"debug_mode": checked})
         # 立即应用日志设置
         setup_logger(is_gui_app=True, debug_mode=checked)
+        # 🔥 重新添加Qt handler到新的logger实例
+        if hasattr(self, 'log_text_edit'):
+            add_qt_log_handler(self.log_text_edit, debug_mode=checked)
+    
+    def _create_log_console(self) -> QWidget:
+        """创建日志控制台显示区域"""
+        group = QFrame()
+        group.setObjectName("SettingGroup")
+        layout = QVBoxLayout(group)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(15)
+        
+        # 标题
+        header = QLabel("📝 控制台输出")
+        header_font = QFont()
+        header_font.setPointSize(14)
+        header_font.setBold(True)
+        header.setFont(header_font)
+        layout.addWidget(header)
+        
+        # 日志显示区
+        self.log_text_edit = QTextEdit()
+        self.log_text_edit.setReadOnly(True)
+        self.log_text_edit.setFixedHeight(300)
+        self.log_text_edit.setStyleSheet("""
+            QTextEdit {
+                background-color: #0a0a0a;
+                color: #c0c0c0;
+                font-family: 'Consolas', 'Courier New', monospace;
+                font-size: 10pt;
+                border: 1px solid #333;
+                border-radius: 4px;
+                padding: 8px;
+            }
+        """)
+        layout.addWidget(self.log_text_edit)
+        
+        # 按钮栏
+        btn_layout = QHBoxLayout()
+        
+        clear_btn = QPushButton("清空日志")
+        clear_btn.setFixedWidth(100)
+        clear_btn.setCursor(Qt.PointingHandCursor)
+        clear_btn.clicked.connect(self.log_text_edit.clear)
+        btn_layout.addWidget(clear_btn)
+        
+        btn_layout.addStretch()
+        layout.addLayout(btn_layout)
+        
+        # 🔥 添加loguru handler将日志输出到这个QTextEdit
+        debug_mode = self.config_manager.settings.get("debug_mode", False)
+        add_qt_log_handler(self.log_text_edit, debug_mode=debug_mode)
+        
+        return group
 
     def _create_interaction_section(self) -> QWidget:
         """创建交互设置区域"""
