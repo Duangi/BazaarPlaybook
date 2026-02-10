@@ -1,13 +1,14 @@
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QTableWidget, QTableWidgetItem, QHeaderView
 from PySide6.QtCore import Qt, Slot
+from utils.overlay_helper import enable_overlay_mode
 
 class DebugOverlayWindow(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Scanner Debug Info")
         self.resize(400, 600)
-        # Always on top, tool window style
-        self.setWindowFlags(Qt.WindowStaysOnTopHint | Qt.Tool) 
+        # 使用跨平台覆盖助手（自动处理 macOS 全屏支持）
+        enable_overlay_mode(self, frameless=False, translucent=False) 
         
         layout = QVBoxLayout()
         self.setLayout(layout)

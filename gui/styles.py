@@ -524,7 +524,6 @@ def get_sidebar_style(scale=1.0):
     
     QSlider::handle:horizontal:hover {{
         background: {COLOR_GOLD_HOVER};
-        transform: scale(1.1);
     }}
     
     QSlider::sub-page:horizontal {{

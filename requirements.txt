@@ -5,8 +5,12 @@ onnxruntime; sys_platform != 'win32'
 opencv-python-headless
 dxcam; sys_platform == 'win32'
 pywin32; sys_platform == 'win32'
+keyboard; sys_platform == 'win32'
+mouse; sys_platform == 'win32'
 pyobjc-framework-Quartz; sys_platform == 'darwin'
 pyobjc-framework-Cocoa; sys_platform == 'darwin'
+pyobjc-framework-ApplicationServices; sys_platform == 'darwin'
+pyobjc-core; sys_platform == 'darwin'
 python-xlib; sys_platform == 'linux'
 ewmh; sys_platform == 'linux'
 

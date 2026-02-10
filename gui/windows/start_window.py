@@ -5,6 +5,7 @@ from PySide6.QtCore import Qt, Signal, QPoint
 from PySide6.QtGui import QFont
 from gui.styles import START_WINDOW_STYLE
 from gui.components.styled_button import StyledButton
+from utils.overlay_helper import enable_overlay_mode
 
 class StartWindow(QWidget):
     entered = Signal()
@@ -12,8 +13,8 @@ class StartWindow(QWidget):
 
     def __init__(self):
         super().__init__()
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
-        self.setAttribute(Qt.WA_TranslucentBackground)
+        # 使用跨平台覆盖助手（自动处理 macOS 全屏支持）
+        enable_overlay_mode(self, frameless=True, translucent=True)
         
         self.resize(700, 500) 
         self._drag_pos = QPoint()

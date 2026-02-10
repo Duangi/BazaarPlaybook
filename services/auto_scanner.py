@@ -1,5 +1,6 @@
 from PySide6.QtCore import QThread, Signal, QRect, QTimer, QMutex
 from PySide6.QtWidgets import QApplication
+import sys
 import time
 import cv2
 import numpy as np
@@ -9,15 +10,29 @@ from loguru import logger
 import config
 
 from core.detectors.yolo_detector import YoloDetector
-from core.capturers.dxcam_capturer import DXCamCapturer
+# DXCamCapturer 仅在 Windows 上可用
+if sys.platform == "win32":
+    from core.capturers.dxcam_capturer import DXCamCapturer
+else:
+    DXCamCapturer = None
 from core.capturers.mss_capturer import MSSCapturer
 from core.comparators.feature_matcher import FeatureMatcher
 from utils.window_utils import get_window_rect, get_mouse_pos_relative, is_window_foreground, is_focus_valid, is_process_running
 
 from services.ocr_service import OCRService
 from data_manager.config_manager import ConfigManager
-import keyboard
-import mouse
+
+# keyboard 和 mouse 库在 macOS 上可能导致段错误，仅在 Windows 上使用
+if sys.platform == "win32":
+    try:
+        import keyboard
+        import mouse
+    except ImportError:
+        keyboard = None
+        mouse = None
+else:
+    keyboard = None
+    mouse = None
 
 class AutoScanner(QThread):
     # type: 'monster' | 'card', id: str, rect: QRect
@@ -83,13 +98,18 @@ class AutoScanner(QThread):
                 logger.error(f"Failed to load YOLO: {e}")
         
         if not self.capturer:
-            # Try DXCam first, then MSS
-            try:
-                self.capturer = DXCamCapturer()
-                if not self.capturer.camera: # DXCam might fail inside init
-                     raise Exception("DXCam init failed")
-            except:
-                logger.warning("DXCam unavailable, using MSS")
+            # Try DXCam first (Windows only), then MSS
+            if sys.platform == "win32" and DXCamCapturer is not None:
+                try:
+                    self.capturer = DXCamCapturer()
+                    if not self.capturer.camera: # DXCam might fail inside init
+                         raise Exception("DXCam init failed")
+                except:
+                    logger.warning("DXCam unavailable, using MSS")
+                    self.capturer = MSSCapturer()
+            else:
+                # macOS/Linux: 使用 MSS
+                logger.info("Using MSS capturer (non-Windows platform)")
                 self.capturer = MSSCapturer()
         
         if not self.matcher:
@@ -256,13 +276,15 @@ class AutoScanner(QThread):
                     try:
                         if hotkey_str.startswith("mouse:"):
                             # Mouse button check
-                            btn = hotkey_str.split(":")[1]
-                            if mouse.is_pressed(btn):
-                                hotkey_pressed = True
+                            if mouse is not None:
+                                btn = hotkey_str.split(":")[1]
+                                if mouse.is_pressed(btn):
+                                    hotkey_pressed = True
                         else:
                             # Keyboard check
-                            if keyboard.is_pressed(hotkey_str):
-                                hotkey_pressed = True
+                            if keyboard is not None:
+                                if keyboard.is_pressed(hotkey_str):
+                                    hotkey_pressed = True
                     except:
                         pass
                 

@@ -96,8 +96,6 @@ class MonsterOverviewPage(QWidget):
                 text-align: center;
                 text-transform: uppercase;
                 letter-spacing: 2px;
-                /* 斜切效果通过变换实现 */
-                transform: skewX(-5deg);
             }
             #TacticalScanButton:hover {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
@@ -107,7 +105,6 @@ class MonsterOverviewPage(QWidget):
                     stop:0.7 #E5C158,
                     stop:1 #A0825A);
                 border: 2px solid rgba(255, 215, 0, 0.8);
-                box-shadow: 0 0 15px rgba(255, 215, 0, 0.5);
             }
             #TacticalScanButton:pressed {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
@@ -182,7 +179,6 @@ class MonsterOverviewPage(QWidget):
                     color: #000;
                     font-weight: 900;
                     border: 2px solid rgba(255, 215, 0, 0.8);
-                    box-shadow: 0 0 10px rgba(255, 215, 0, 0.4);
                 }
             """)
             

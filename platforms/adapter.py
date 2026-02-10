@@ -1,6 +1,7 @@
 import sys
 from platforms.interfaces.ocr import OCREngine
 from platforms.interfaces.window import WindowManager
+from platforms.interfaces.game_log import GameLogPathProvider
 from loguru import logger
 
 class PlatformAdapter:
@@ -104,6 +105,37 @@ class PlatformAdapter:
         logger.warning("当前平台不支持窗口管理，使用空实现")
         from platforms.interfaces.window import NullWindowManager
         return NullWindowManager()
+    
+    @staticmethod
+    def get_game_log_path_provider() -> GameLogPathProvider:
+        """
+        根据当前操作系统，获取对应的游戏日志路径提供者
+        """
+        if sys.platform == "win32":
+            try:
+                from platforms.windows.game_log import WindowsGameLogPathProvider
+                return WindowsGameLogPathProvider()
+            except Exception as e:
+                logger.error(f"加载 Windows 游戏日志路径提供者失败: {e}")
+        
+        elif sys.platform == "darwin":
+            try:
+                from platforms.macos.game_log import MacOSGameLogPathProvider
+                return MacOSGameLogPathProvider()
+            except Exception as e:
+                logger.error(f"加载 macOS 游戏日志路径提供者失败: {e}")
+        
+        elif sys.platform.startswith("linux"):
+            try:
+                from platforms.linux.game_log import LinuxGameLogPathProvider
+                return LinuxGameLogPathProvider()
+            except Exception as e:
+                logger.error(f"加载 Linux 游戏日志路径提供者失败: {e}")
+        
+        # 回退到空实现
+        logger.warning("当前平台不支持游戏日志路径，使用空实现")
+        from platforms.interfaces.game_log import NullGameLogPathProvider
+        return NullGameLogPathProvider()
     
     @staticmethod
     def get_capture_tool():

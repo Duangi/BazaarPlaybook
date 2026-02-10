@@ -1,4 +1,7 @@
-import mss
+try:
+    import mss
+except ImportError:
+    mss = None
 import numpy as np
 import cv2
 from .base import BaseCapturer
@@ -7,10 +10,20 @@ from loguru import logger
 class MSSCapturer(BaseCapturer):
     def __init__(self):
         super().__init__()
-        self.sct = mss.mss()
-        logger.info("MSS capturer initialized.")
+        if mss is None:
+            logger.error("mss library is not installed. Install it with: pip install mss")
+            self.sct = None
+            return
+        try:
+            self.sct = mss.mss()
+            logger.info("MSS capturer initialized.")
+        except Exception as e:
+            logger.error(f"Failed to initialize MSS: {e}")
+            self.sct = None
 
     def capture(self) -> np.ndarray:
+        if not self.sct:
+            return None
         if not self.region:
             monitor = self.sct.monitors[1] # Default to primary
         else:

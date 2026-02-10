@@ -1,13 +1,28 @@
-import dxcam
+import sys
 import numpy as np
 from loguru import logger
 from .base import BaseCapturer
+
+# dxcam 仅在 Windows 上可用
+if sys.platform == "win32":
+    try:
+        import dxcam
+    except ImportError:
+        dxcam = None
+        logger.warning("dxcam not available on this platform")
+else:
+    dxcam = None
 
 class DXCamCapturer(BaseCapturer):
     def __init__(self, target_fps=30):
         super().__init__()
         self.camera = None
         self.target_fps = target_fps
+        
+        if dxcam is None:
+            logger.error("DXCam is not available on this platform (Windows only)")
+            return
+        
         try:
             # create(device_idx=0, output_idx=0) - 默认主显示器
             self.camera = dxcam.create(output_idx=0, output_color="BGR")

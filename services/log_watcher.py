@@ -11,6 +11,7 @@ from loguru import logger
 from typing import Optional
 
 from services.log_analyzer import LogAnalyzer
+from platforms.adapter import PlatformAdapter
 
 
 class LogWatcher(QObject):
@@ -26,13 +27,27 @@ class LogWatcher(QObject):
     def __init__(self, parent=None):
         super().__init__(parent)
         
-        # 日志文件路径（固定）
-        self.log_dir = Path(r"C:\Users\Admin\AppData\LocalLow\Tempo Storm\The Bazaar")
-        self.player_log = self.log_dir / "Player.log"
-        self.player_prev_log = self.log_dir / "Player-prev.log"
+        # 获取平台特定的日志路径
+        log_path_provider = PlatformAdapter.get_game_log_path_provider()
+        
+        # 日志文件路径（跨平台）
+        self.log_dir = log_path_provider.get_log_directory()
+        self.player_log = log_path_provider.get_player_log_path()
+        self.player_prev_log = log_path_provider.get_player_prev_log_path()
+        
+        # 验证路径
+        if self.log_dir is None or self.player_log is None:
+            logger.error("无法获取游戏日志路径，日志监控功能将不可用")
+            logger.info("请确保游戏已安装并至少运行过一次")
+        else:
+            logger.info(f"日志目录: {self.log_dir}")
+            logger.info(f"Player.log: {self.player_log}")
         
         # 日志分析器
-        self.analyzer = LogAnalyzer(str(self.log_dir))
+        if self.log_dir:
+            self.analyzer = LogAnalyzer(str(self.log_dir))
+        else:
+            self.analyzer = None
         
         # 监控线程控制
         self.running = False
@@ -51,6 +66,12 @@ class LogWatcher(QObject):
         """启动监控"""
         if self.running:
             logger.warning("[LogWatcher] 已在运行中")
+            return
+        
+        # 检查日志路径是否有效
+        if self.log_dir is None or self.analyzer is None:
+            logger.error("[LogWatcher] 日志路径无效，无法启动监控")
+            self.status_changed.emit(False, "日志路径无效")
             return
         
         self.running = True
@@ -97,11 +118,16 @@ class LogWatcher(QObject):
     def _initialize_state(self):
         """初始化监控状态"""
         try:
+            # 检查路径有效性
+            if not self.player_log or not self.analyzer:
+                logger.error("[LogWatcher] 日志路径无效，无法初始化")
+                return
+            
             # 记录初始文件位置（移动到文件末尾）
             if self.player_log.exists():
                 self.last_player_log_pos = self.player_log.stat().st_size
             
-            if self.player_prev_log.exists():
+            if self.player_prev_log and self.player_prev_log.exists():
                 self.last_player_prev_log_pos = self.player_prev_log.stat().st_size
             
             # 初次分析，获取所有已存在的会话

@@ -2,13 +2,24 @@
 Hotkey Recorder Dialog
 弹窗捕获键盘与鼠标按键
 """
-import keyboard
-import mouse
+import sys
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton, QHBoxLayout, QFrame
 from PySide6.QtCore import Qt, Signal, QThread, Slot
 from PySide6.QtGui import QFont
 
 from gui.styles import COLOR_GOLD
+
+# keyboard 和 mouse 库在 macOS 上可能导致段错误，仅在 Windows 上使用
+if sys.platform == "win32":
+    try:
+        import keyboard
+        import mouse
+    except ImportError:
+        keyboard = None
+        mouse = None
+else:
+    keyboard = None
+    mouse = None
 
 class RecorderWorker(QThread):
     """后台监听线程"""
@@ -22,6 +33,11 @@ class RecorderWorker(QThread):
 
     def run(self):
         self.listening = True
+        
+        # 在非 Windows 平台上，keyboard/mouse 不可用
+        if keyboard is None or mouse is None:
+            self.finished.emit("UNSUPPORTED_PLATFORM")
+            return
         
         # We need a way to block/wait or just setup hooks and wait for signal
         # Since hooks are callbacks, we can just use a loop or wait condition.

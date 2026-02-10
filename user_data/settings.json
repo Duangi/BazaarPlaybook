@@ -1,7 +1,7 @@
 {
     "yolo_fps": 3,
     "best_ocr": "RapidOCR_ONNX",
-    "preferred_provider": "AzureExecutionProvider",
+    "preferred_provider": "CoreMLExecutionProvider",
     "best_ocr_engine": "Windows_Native",
     "auto_scan_enabled": true,
     "overlay_enabled": false,

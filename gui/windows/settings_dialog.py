@@ -4,6 +4,7 @@ from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
                               QSlider, QFrame, QPushButton)
 from PySide6.QtCore import Qt, Signal
 from gui.components.styled_button import StyledButton
+from utils.overlay_helper import enable_overlay_mode
 
 class SettingsDialog(QDialog):
     """设置对话框"""
@@ -13,8 +14,8 @@ class SettingsDialog(QDialog):
     def __init__(self, current_scale=1.0, parent=None):
         super().__init__(parent)
         self.setWindowTitle("设置")
-        self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
-        self.setAttribute(Qt.WA_TranslucentBackground)
+        # 使用跨平台覆盖助手（自动处理 macOS 全屏支持）
+        enable_overlay_mode(self, frameless=True, translucent=True)
         self.setFixedSize(400, 300)
         self._current_scale = current_scale
         self._setup_ui()

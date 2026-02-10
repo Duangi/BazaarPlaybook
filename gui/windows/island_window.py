@@ -2,6 +2,7 @@
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QLabel
 from PySide6.QtCore import Qt, Signal, QPoint, QPropertyAnimation, QEasingCurve, QRect
 from PySide6.QtGui import QPainter, QColor, QPen, QLinearGradient
+from utils.overlay_helper import enable_overlay_mode
 
 class IslandWindow(QWidget):
     """灵动岛 - 核心态势感知中心"""
@@ -17,14 +18,11 @@ class IslandWindow(QWidget):
     def __init__(self):
         super().__init__()
         
-        # 窗口设置
-        self.setWindowFlags(
-            Qt.FramelessWindowHint | 
-            Qt.WindowStaysOnTopHint | 
-            Qt.Tool  # 不在任务栏显示
-        )
-        self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setAttribute(Qt.WA_TransparentForMouseEvents, False)  # 初始不穿透
+        # 使用跨平台覆盖助手（自动处理 macOS 全屏支持）
+        enable_overlay_mode(self, frameless=True, translucent=True)
+        
+        # 确保不穿透鼠标事件
+        self.setAttribute(Qt.WA_TransparentForMouseEvents, False)
         
         # 状态
         self.current_state = self.STATE_NORMAL

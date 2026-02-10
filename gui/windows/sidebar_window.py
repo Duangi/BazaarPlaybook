@@ -8,6 +8,7 @@ from PySide6.QtGui import QIcon
 import gui.styles as styles
 from gui.utils.frameless_helper import FramelessHelper
 from utils.icon_helper import create_colored_svg_icon
+from utils.overlay_helper import enable_overlay_mode
 from gui.pages.monster_overview_page import MonsterOverviewPage
 from gui.pages.settings_page import SettingsPage
 from gui.pages.history_page_holographic import HistoryPageHolographic as HistoryPage
@@ -21,8 +22,8 @@ class SidebarWindow(QWidget):
     
     def __init__(self):
         super().__init__()
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
-        self.setAttribute(Qt.WA_TranslucentBackground)
+        # 使用跨平台覆盖助手（自动处理 macOS 全屏支持）
+        enable_overlay_mode(self, frameless=True, translucent=True)
         
         # ✅ 窗口位置配置文件路径
         self.config_file = os.path.join("user_data", "sidebar_window.json")

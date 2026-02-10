@@ -332,6 +332,27 @@ class BazaarApp:
         self.expand_anim = anim
 
 if __name__ == "__main__":
+    # macOS：在创建 QApplication 之前配置 NSApp（关键！）
+    if sys.platform == "darwin":
+        try:
+            import os
+            # 设置环境变量，让所有窗口在当前空间显示
+            os.environ['QT_MAC_WANTS_LAYER'] = '1'
+            
+            from AppKit import NSApp, NSApplication
+            from Cocoa import NSApplicationActivationPolicyRegular
+            
+            # 创建/获取 NSApplication（必须在 QApplication 之前）
+            ns_app = NSApplication.sharedApplication()
+            ns_app.setActivationPolicy_(NSApplicationActivationPolicyRegular)
+            
+            # 激活应用到前台，让窗口在当前空间显示
+            ns_app.activateIgnoringOtherApps_(True)
+            
+            print("✅ macOS NSApp 已在 Qt 之前配置")
+        except Exception as e:
+            print(f"⚠️  macOS 配置失败: {e}")
+    
     # 强制开启 DPI 感知 (解决 4K 屏幕截图分辨率不匹配问题)
     try:
         ctypes.windll.shcore.SetProcessDpiAwareness(1)

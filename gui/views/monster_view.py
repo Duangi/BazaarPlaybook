@@ -188,7 +188,6 @@ class MonsterView(QWidget):
                 background: linear-gradient(180deg, 
                     rgba(255, 215, 0, 0.9), 
                     rgba(255, 190, 0, 0.8));
-                box-shadow: 0 0 8px rgba(255, 204, 0, 0.5);
             }
             
             QScrollArea QScrollBar::add-line:vertical,

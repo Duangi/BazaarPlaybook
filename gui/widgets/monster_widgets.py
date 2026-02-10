@@ -176,7 +176,6 @@ class MonsterCard(QFrame):
                     stop:0.5 rgba(60, 52, 38, 0.95),
                     stop:1 rgba(50, 45, 35, 0.92));
                 border: 1px solid rgba(212, 175, 55, 0.35);
-                box-shadow: 0 2px 8px rgba(212, 175, 55, 0.15);
             }
             #MonsterName {
                 color: #FFFFFF;

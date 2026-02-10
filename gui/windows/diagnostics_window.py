@@ -8,6 +8,7 @@ from loguru import logger
 
 import config
 from gui.styles import DIAGNOSTICS_STYLE
+from utils.overlay_helper import enable_overlay_mode
 from gui.components.styled_button import StyledButton
 from gui.components.info_card import InfoCard
 from core.diagnostics import SystemDiagnostics
@@ -73,8 +74,8 @@ class DiagnosticsWindow(QWidget):
     
     def __init__(self):
         super().__init__()
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
-        self.setAttribute(Qt.WA_TranslucentBackground)
+        # 使用跨平台覆盖助手（自动处理 macOS 全屏支持）
+        enable_overlay_mode(self, frameless=True, translucent=True)
         self.resize(1000, 650)
         self._drag_pos = QPoint()  # 初始化拖动位置
         self._setup_ui()
