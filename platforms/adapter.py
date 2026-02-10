@@ -1,5 +1,6 @@
 import sys
 from platforms.interfaces.ocr import OCREngine
+from platforms.interfaces.window import WindowManager
 from loguru import logger
 
 class PlatformAdapter:
@@ -72,6 +73,38 @@ class PlatformAdapter:
         # 3. 可以在这里继续添加其它引擎，比如 EasyOCR 或 Tesseract
         
         return available_engines
+    
+    @staticmethod
+    def get_window_manager() -> WindowManager:
+        """
+        根据当前操作系统，获取对应的窗口管理器实现
+        """
+        if sys.platform == "win32":
+            try:
+                from platforms.windows.window import WindowsWindowManager
+                return WindowsWindowManager()
+            except Exception as e:
+                logger.error(f"加载 Windows 窗口管理器失败: {e}")
+        
+        elif sys.platform == "darwin":
+            try:
+                from platforms.macos.window import MacOSWindowManager
+                return MacOSWindowManager()
+            except Exception as e:
+                logger.error(f"加载 macOS 窗口管理器失败: {e}")
+        
+        elif sys.platform.startswith("linux"):
+            try:
+                from platforms.linux.window import LinuxWindowManager
+                return LinuxWindowManager()
+            except Exception as e:
+                logger.error(f"加载 Linux 窗口管理器失败: {e}")
+        
+        # 回退到空实现
+        logger.warning("当前平台不支持窗口管理，使用空实现")
+        from platforms.interfaces.window import NullWindowManager
+        return NullWindowManager()
+    
     @staticmethod
     def get_capture_tool():
         """

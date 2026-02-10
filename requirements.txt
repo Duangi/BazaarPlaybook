@@ -1,9 +1,14 @@
 pyside6
 loguru
-onnxruntime-gpu
+onnxruntime-gpu; sys_platform == 'win32'
+onnxruntime; sys_platform != 'win32'
 opencv-python-headless
-dxcam
-pywin32
+dxcam; sys_platform == 'win32'
+pywin32; sys_platform == 'win32'
+pyobjc-framework-Quartz; sys_platform == 'darwin'
+pyobjc-framework-Cocoa; sys_platform == 'darwin'
+python-xlib; sys_platform == 'linux'
+ewmh; sys_platform == 'linux'
 
 rapidocr_onnxruntime
 rapidfuzz

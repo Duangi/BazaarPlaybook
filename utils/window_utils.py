@@ -1,121 +1,112 @@
-import win32gui
-import win32ui
-import win32con
-import ctypes
-import os
-from ctypes import windll, wintypes
+"""
+窗口工具模块 - 跨平台适配器代理
 
-def is_focus_valid(game_title="The Bazaar"):
-    """
-    Returns True if the foreground window is either:
-    1. The Game (title match)
-    2. The Application itself (Process ID match)
-    """
-    hwnd = win32gui.GetForegroundWindow()
-    if not hwnd:
-        return False
-        
-    # 1. Title Check
-    text = win32gui.GetWindowText(hwnd)
-    if game_title.lower() in text.lower():
-        return True
-        
-    # 2. PID Check (Is it us?)
-    try:
-        pid = ctypes.c_ulong()
-        windll.user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
-        if pid.value == os.getpid():
-            return True
-    except Exception:
-        pass
-        
-    return False
+此模块提供与平台无关的窗口管理函数，内部通过 PlatformAdapter 自动选择
+对应平台的实现（Windows/macOS）。
 
-def get_window_rect(window_title, exact_match=False):
-    """
-    Finds a window by title and returns its rectangle (left, top, width, height).
-    """
-    hwnd = win32gui.FindWindow(None, window_title)
-    if not hwnd and not exact_match:
-        # Try fuzzy match
-        def callback(h, ctx):
-            text = win32gui.GetWindowText(h)
-            if window_title.lower() in text.lower():
-                ctx.append(h)
-        found = []
-        win32gui.EnumWindows(callback, found)
-        if found:
-            hwnd = found[0]
+主要功能：
+- 焦点验证
+- 窗口矩形获取
+- 鼠标位置计算
+- 窗口前台检测
+- 焦点恢复
 
-    if not hwnd:
-        return None
-
-    # GetWindowRect returns the bounding box including shadow/border
-    # GetClientRect returns the inner area (0, 0, width, height)
-    # We usually want ClientRect offset to Screen coordinates for capturing the game content only.
+使用示例：
+    from utils.window_utils import get_window_rect, restore_focus_to_game
     
-    rect = win32gui.GetClientRect(hwnd)
-    # rect is (left, top, right, bottom) where left=0, top=0
-    w = rect[2] - rect[0]
-    h = rect[3] - rect[1]
+    rect = get_window_rect("The Bazaar")
+    if rect:
+        x, y, w, h = rect
+        print(f"Game window at {x},{y} size {w}x{h}")
+"""
+
+from typing import Optional, Tuple
+from platforms.adapter import PlatformAdapter
+
+# 获取平台特定的窗口管理器实例（单例模式）
+_window_manager = None
+
+def _get_manager():
+    """懒加载窗口管理器"""
+    global _window_manager
+    if _window_manager is None:
+        _window_manager = PlatformAdapter.get_window_manager()
+    return _window_manager
+
+
+def is_focus_valid(game_title: str = "The Bazaar") -> bool:
+    """
+    检查焦点窗口是否有效（游戏窗口或应用自身）
     
-    # Map client point (0,0) to screen point
-    pt = win32gui.ClientToScreen(hwnd, (0, 0))
-    x, y = pt
-    
-    return (x, y, w, h)
-
-def get_mouse_pos_relative(window_x, window_y):
-    """
-    Returns mouse position relative to the given window coordinates.
-    """
-    pt = wintypes.POINT()
-    windll.user32.GetCursorPos(ctypes.byref(pt))
-    return (pt.x - window_x, pt.y - window_y)
-
-def is_window_foreground(window_title):
-    hwnd = win32gui.GetForegroundWindow()
-    if not hwnd:
-        return False
-    text = win32gui.GetWindowText(hwnd)
-    return window_title.lower() in text.lower()
-
-def get_foreground_window_title():
-    """Returns the title of the foreground window."""
-    hwnd = win32gui.GetForegroundWindow()
-    if not hwnd:
-        return ""
-    return win32gui.GetWindowText(hwnd)
-
-def restore_focus_to_game(game_title="The Bazaar"):
-    """
-    Attempts to restore focus to a window with the given title.
-    """
-    try:
-        hwnd = win32gui.FindWindow(None, game_title)
-        if not hwnd:
-            # Try fuzzy match
-            def callback(h, ctx):
-                text = win32gui.GetWindowText(h)
-                if game_title.lower() in text.lower():
-                    ctx.append(h)
-            found = []
-            win32gui.EnumWindows(callback, found)
-            if found:
-                hwnd = found[0]
+    Args:
+        game_title: 游戏窗口标题，默认 "The Bazaar"
         
-        if hwnd:
-            # Using win32gui.SetForegroundWindow can sometimes fail if the calling thread 
-            # doesn't have permission. Attaching thread input can help, or simple try-catch.
-            try:
-                # Basic attempt
-                win32gui.SetForegroundWindow(hwnd)
-            except Exception:
-                # If valid window but failed, sometimes need a little push (Alt key trick or AttachThreadInput)
-                # For simplicity, we just log/pass. 
-                pass
-            return True
+    Returns:
+        bool: 焦点是否有效
+    """
+    return _get_manager().is_focus_valid(game_title)
+
+
+def get_window_rect(window_title: str, exact_match: bool = False) -> Optional[Tuple[int, int, int, int]]:
+    """
+    获取窗口的客户区矩形
     
-    except Exception as e:
-        print(f"Failed to restore focus: {e}")
-    return False
+    Args:
+        window_title: 窗口标题
+        exact_match: 是否精确匹配标题（默认 False，允许模糊匹配）
+        
+    Returns:
+        Optional[Tuple[int, int, int, int]]: (x, y, width, height) 或 None（未找到窗口）
+    """
+    return _get_manager().get_window_rect(window_title, exact_match)
+
+
+def get_mouse_pos_relative(window_x: int, window_y: int) -> Tuple[int, int]:
+    """
+    获取相对于窗口的鼠标位置
+    
+    Args:
+        window_x: 窗口左上角 X 坐标
+        window_y: 窗口左上角 Y 坐标
+        
+    Returns:
+        Tuple[int, int]: 相对于窗口的鼠标坐标 (x, y)
+    """
+    return _get_manager().get_mouse_pos_relative(window_x, window_y)
+
+
+def is_window_foreground(window_title: str) -> bool:
+    """
+    检查指定标题的窗口是否在前台
+    
+    Args:
+        window_title: 窗口标题
+        
+    Returns:
+        bool: 是否在前台
+    """
+    return _get_manager().is_window_foreground(window_title)
+
+
+def get_foreground_window_title() -> str:
+    """
+    获取前台窗口标题
+    
+    Returns:
+        str: 窗口标题，如果无法获取则返回空字符串
+    """
+    return _get_manager().get_foreground_window_title()
+
+
+def restore_focus_to_game(game_title: str = "The Bazaar") -> bool:
+    """
+    恢复焦点到游戏窗口
+    
+    Args:
+        game_title: 游戏窗口标题，默认 "The Bazaar"
+        
+    Returns:
+        bool: 是否成功恢复焦点
+    """
+    return _get_manager().restore_focus_to_game(game_title)
+
